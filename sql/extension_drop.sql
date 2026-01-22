@@ -38,7 +38,7 @@ CREATE FUNCTION __extension_drop.create_function(
   , grants text DEFAULT NULL
 ) RETURNS void LANGUAGE plpgsql AS $body$
 DECLARE
-  c_clean_args text := cat_tools.function__arg_types_text(args);
+  c_clean_args text := cat_tools.routine__parse_arg_types_text(args);
 
   create_template CONSTANT text := $template$
 CREATE OR REPLACE FUNCTION %s(
@@ -269,6 +269,7 @@ SELECT __extension_drop.create_function(
 DECLARE
   r extension_drop__commands;
 BEGIN
+  RAISE DEBUG 'extension_drop event trigger entry: tg_event %, tg_tag %', tg_event, tg_tag;
   FOR r IN
     SELECT c.*
       FROM extension_drop__commands c
