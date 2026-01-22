@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cat:*)",
+      "Bash(make test:*)",
+      "Bash(tee:*)",
+      "Bash(echo:*)",
+      "Bash(git show:*)",
+      "Bash(git log:*)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(git checkout:*)",
+      "Bash(head:*)"
+    ],
+    "additionalDirectories": [
+      "../pgxntool-test/"
+    ]
+  }
+}
