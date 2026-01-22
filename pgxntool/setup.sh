@@ -3,6 +3,10 @@
 set -o errexit -o errtrace -o pipefail
 trap 'echo "Error on line ${LINENO}"' ERR
 
+# Source common library functions (error, die, debug)
+PGXNTOOL_DIR="$(dirname "${BASH_SOURCE[0]}")"
+source "$PGXNTOOL_DIR/lib.sh"
+
 [ -d .git ] || git init
 
 if ! git diff --cached --exit-code; then
