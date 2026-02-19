@@ -4,6 +4,23 @@
 # This file is meant to be sourced by other scripts, not executed directly.
 # Usage: source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
+# =============================================================================
+# SETUP FILES CONFIGURATION
+# =============================================================================
+# Files copied by setup.sh and tracked by update-setup-files.sh for sync updates.
+# Format: "source_in_pgxntool:destination_in_project"
+# =============================================================================
+SETUP_FILES=(
+    "_.gitignore:.gitignore"
+    "test/deps.sql:test/deps.sql"
+)
+
+# Symlinks created by setup.sh and verified by update-setup-files.sh
+# Format: "destination:target"
+SETUP_SYMLINKS=(
+    "test/pgxntool:../pgxntool/test/pgxntool"
+)
+
 # Error function - outputs to stderr but doesn't exit
 # Usage: error "message"
 error() {
