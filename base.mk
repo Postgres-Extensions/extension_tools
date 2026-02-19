@@ -304,8 +304,8 @@ print-%	: ; $(info $* is $(flavor $*) variable set to "$($*)") @true
 # 3-way merge if both you and pgxntool changed the file.
 .PHONY: pgxntool-sync-%
 pgxntool-sync-%:
-	@old_commit=$$(git log -1 --format=%H -- pgxntool/); \
-	git subtree pull -P pgxntool --squash -m "Pull pgxntool from $($@)" $($@); \
+	@old_commit=$$(git log -1 --format=%H -- pgxntool/) && \
+	git subtree pull -P pgxntool --squash -m "Pull pgxntool from $($@)" $($@) && \
 	pgxntool/update-setup-files.sh "$$old_commit"
 pgxntool-sync: pgxntool-sync-release
 
