@@ -1,3 +1,4 @@
+/* DO NOT EDIT - AUTO-GENERATED FILE */
 /*
  * NOTE: All pg_temp objects must be dropped at the end of the script!
  * Otherwise the eventual DROP CASCADE of pg_temp when the session ends will

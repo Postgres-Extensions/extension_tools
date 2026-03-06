@@ -1,11 +1,15 @@
 # Editor files
 .*.swp
 
+# Claude Code local settings
+.claude/*.local.json
+
 # Explicitly exclude META.json!
 !/META.json
 
 # Generated make files
 meta.mk
+control.mk
 
 # Compiler output
 *.o
@@ -13,8 +17,7 @@ meta.mk
 .deps/
 
 # built targets
-/sql/*--*
-!/sql/*--*--*.sql
+# Note: Version-specific files (sql/*--*.sql) are now tracked in git and should be committed
 
 # Test artifacts
 results/
@@ -24,3 +27,6 @@ regression.out
 # Misc
 tmp/
 .DS_Store
+
+# pg_tle generated files
+/pg_tle/

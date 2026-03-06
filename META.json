@@ -16,7 +16,7 @@
     "name": "extension_drop",
 
     "X_comment": "REQUIRED. Version of the distribution. http://pgxn.org/spec/#version",
-    "version": "0.1.1",
+    "version": "1.0.0",
 
     "X_comment": "REQUIRED. Short description of distribution.",
     "abstract": "Run custom commands when an extension is dropped.",
@@ -28,7 +28,7 @@
     "maintainer": [ "Jim Nasby <Jim.Nasby@OpenSCG.com>" ],
 
     "X_comment": "Optional. Status of distribution. Allowed values: unstable, testing, stable",
-    "release_status": "unstable",
+    "release_status": "testing",
 
     "X_comment": "REQUIRED. License(s) distribution is released under. http://pgxn.org/spec/#license",
     "license": "postgresql",
@@ -41,7 +41,7 @@
             "file": "sql/extension_drop.sql",
 
             "X_comment": "REQUIRED. Version the extension is at.",
-            "version": "0.1.1",
+            "version": "1.0.0",
 
             "X_comment": "Optional: \"abstract\": Description of the extension.",
             "abstract": "Run custom commands when an extension is dropped.",
@@ -72,7 +72,7 @@
     "X_comment": "Valid keys for 'prereqs' are configure, build, runtime, or test.",
     "X_comment": "Valid keys for 'requires' are requires, recommends, suggests, or conflicts.",
     "X_comment": "Requires event_triggers, introduced in 9.3",
-    "X_comment": "cat_tools: requires extension suppport, added in 0.2.1",
+    "X_comment": "cat_tools: requires extension support, added in 0.2.1",
     "prereqs": {
 
         "build": {
