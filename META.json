@@ -28,7 +28,7 @@
     "maintainer": [ "Jim Nasby <Jim.Nasby@OpenSCG.com>" ],
 
     "X_comment": "Optional. Status of distribution. Allowed values: unstable, testing, stable",
-    "release_status": "testing",
+    "release_status": "stable",
 
     "X_comment": "REQUIRED. License(s) distribution is released under. http://pgxn.org/spec/#license",
     "license": "postgresql",
@@ -47,6 +47,7 @@
             "abstract": "Run custom commands when an extension is dropped.",
 
             "X_comment": "Optional: \"docfile\": filesystem path to document file for extension.",
+            "docfile": "README.md",
 
             "X_end": ""
         }
@@ -57,13 +58,13 @@
 
     "X_comment": "Optional. \"resources\": Web resources available for this distribution. http://pgxn.org/spec/#resources",
     "resources": {
-        "homepage": "http://github.com/decibel/extension_drop/",
+        "homepage": "https://github.com/Postgres-Extensions/extension_tools/",
         "bugtracker": {
-            "web": "http://github.com/decibel/extension_drop/issues"
+            "web": "https://github.com/Postgres-Extensions/extension_tools/issues"
         },
         "repository": {
-            "url": "git://github.com/decibel/extension_drop.git",
-            "web": "http://github.com/decibel/extension_drop/",
+            "url": "https://github.com/Postgres-Extensions/extension_tools.git",
+            "web": "https://github.com/Postgres-Extensions/extension_tools/",
             "type": "git"
         }
     },
