@@ -1,5 +1,13 @@
 name: CI
-on: [push, pull_request]
+# Scope push to master only. With a bare `on: [push, pull_request]`, a commit to
+# a branch that has an open PR triggers CI twice (once for push, once for
+# pull_request) for the same SHA -- wasteful, and a flaky run can show red next
+# to an identical green one. PR branches now run only via pull_request; master
+# (post-merge) runs via push.
+on:
+  push:
+    branches: [master]
+  pull_request:
 jobs:
   test:
     strategy:
