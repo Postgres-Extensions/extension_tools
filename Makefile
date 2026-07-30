@@ -21,15 +21,17 @@ install: deps
 # are there, and even 0.2.3 predates this function. So PGXN isn't a usable
 # install source right now.
 #
-# Building straight from a pinned git commit instead of PGXN is a supported
-# way to depend on an extension here, not just a one-off hack -- reach for it
-# again whenever a dependency's real state has moved ahead of what's tagged
-# on PGXN. What IS temporary is this specific pin: CAT_TOOLS_GIT_SHA below is
-# a stopgap for cat_tools 0.3.0 specifically, tracking the tip of its master
-# as of this fix. Once 0.3.0 is tagged and published to PGXN, revert *this
-# target* to a plain `pgxn install 'cat_tools>=0.3.0' --sudo`; leave the
-# git-pin mechanism itself in place for reuse if this happens again.
-CAT_TOOLS_GIT_SHA = 1788dc059d49c4ff716d0c7043c43421671de008
+# Building straight from a git ref instead of PGXN is a supported way to
+# depend on an extension here, not just a one-off hack -- reach for it again
+# whenever a dependency's real state has moved ahead of what's tagged on
+# PGXN. What IS temporary is depending on cat_tools this way at all:
+# CAT_TOOLS_GIT_REF tracks cat_tools' `master` directly rather than a pinned
+# commit, since the function we need doesn't exist on any tagged release, so
+# there's nothing more stable to pin to yet. Once 0.3.0 is tagged and
+# published to PGXN, revert *this target* to a plain
+# `pgxn install 'cat_tools>=0.3.0' --sudo`; leave the git-source mechanism
+# itself in place for reuse if this happens again.
+CAT_TOOLS_GIT_REF = master
 CAT_TOOLS_BUILD_DIR = tmp/cat_tools-build
 
 .PHONY: cat_tools
@@ -37,6 +39,6 @@ cat_tools: $(DESTDIR)$(datadir)/extension/cat_tools.control
 $(DESTDIR)$(datadir)/extension/cat_tools.control:
 	rm -rf $(CAT_TOOLS_BUILD_DIR)
 	git clone https://github.com/Postgres-Extensions/cat_tools.git $(CAT_TOOLS_BUILD_DIR)
-	cd $(CAT_TOOLS_BUILD_DIR) && git checkout $(CAT_TOOLS_GIT_SHA)
+	cd $(CAT_TOOLS_BUILD_DIR) && git checkout $(CAT_TOOLS_GIT_REF)
 	$(MAKE) -C $(CAT_TOOLS_BUILD_DIR) install PG_CONFIG=$(PG_CONFIG) DESTDIR=$(DESTDIR)
 	rm -rf $(CAT_TOOLS_BUILD_DIR)

@@ -6,11 +6,11 @@ register additional SQL to run when a given extension is dropped.
 
 Requires [cat_tools](https://github.com/Postgres-Extensions/cat_tools) >= 0.3.0.
 Note: as of this writing, cat_tools 0.3.0 has not been tagged/published to
-PGXN yet, so the `cat_tools` build dependency is temporarily installed from a
-pinned git commit rather than via `pgxn install` -- see the `Makefile`. This
-will revert to a plain `pgxn install` once 0.3.0 is published; building from
-a pinned commit is itself a supported fallback for this kind of gap, not a
-one-off hack.
+PGXN yet, so the `cat_tools` build dependency is temporarily installed
+straight from its `master` branch rather than via `pgxn install` -- see the
+`Makefile`. This will revert to a plain `pgxn install` once 0.3.0 is
+published; building from a git ref is itself a supported fallback for this
+kind of gap, not a one-off hack.
 
 ## Functions
 
