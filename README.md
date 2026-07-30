@@ -4,7 +4,10 @@ Run custom commands when an extension is dropped. By default, `DROP
 EXTENSION` simply drops all the objects the extension owns; this lets you
 register additional SQL to run when a given extension is dropped.
 
-Requires [cat_tools](https://pgxn.org/dist/cat_tools/) >= 0.2.1.
+Requires [cat_tools](https://github.com/Postgres-Extensions/cat_tools) >= 0.3.0.
+Note: as of this writing, cat_tools 0.3.0 has not been tagged/published to
+PGXN yet, so the `cat_tools` build dependency is installed from a pinned git
+commit rather than via `pgxn install` -- see the `Makefile`.
 
 ## Functions
 
