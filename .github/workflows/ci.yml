@@ -23,9 +23,6 @@ jobs:
         uses: actions/checkout@v5
       - name: Test on PostgreSQL ${{ matrix.pg }}
         run: pg-build-test
-      - name: TEMP DEBUG dump regression diffs
-        if: always()
-        run: cat test/regression.diffs || true
 
   # A single stable check name for use as a required status check in branch
   # protection. Matrix jobs produce names like "🐘 PostgreSQL 14" that change
