@@ -19,10 +19,16 @@ install: deps
 # (and carrying a pre-omit_column-fix catalog query that breaks on PG12+).
 # 0.3.0 itself has not been tagged/published to PGXN yet -- only 0.2.2/0.2.3
 # are there, and even 0.2.3 predates this function. So PGXN isn't a usable
-# install source right now: build straight from GitHub source instead,
-# pinned to a specific commit on Postgres-Extensions/cat_tools's master for
-# reproducibility. Once 0.3.0 is tagged and published to PGXN, revert this to
-# a plain `pgxn install 'cat_tools>=0.3.0' --sudo`.
+# install source right now.
+#
+# Building straight from a pinned git commit instead of PGXN is a supported
+# way to depend on an extension here, not just a one-off hack -- reach for it
+# again whenever a dependency's real state has moved ahead of what's tagged
+# on PGXN. What IS temporary is this specific pin: CAT_TOOLS_GIT_SHA below is
+# a stopgap for cat_tools 0.3.0 specifically, tracking the tip of its master
+# as of this fix. Once 0.3.0 is tagged and published to PGXN, revert *this
+# target* to a plain `pgxn install 'cat_tools>=0.3.0' --sudo`; leave the
+# git-pin mechanism itself in place for reuse if this happens again.
 CAT_TOOLS_GIT_SHA = 1788dc059d49c4ff716d0c7043c43421671de008
 CAT_TOOLS_BUILD_DIR = tmp/cat_tools-build
 
