@@ -11,6 +11,33 @@ Releases use pgxntool's built-in `make tag`/`make dist` mechanics to produce a
 be uploaded to PGXN Manager by hand. See "Future: CI automation" below for the
 planned upgrade path.
 
+## Critical: never cut a release while a dependency is pinned to a git source
+
+Some dependencies are occasionally built from a pinned git ref instead of a
+real PGXN-published version, when the version we actually need hasn't been
+tagged yet (see e.g. the `Makefile`'s `cat_tools` target and
+`CAT_TOOLS_GIT_REF`). While a pin like that is active, this distribution's
+declared dependency floor (`META.in.json`'s `prereqs`) isn't actually
+satisfiable via `pgxn install` — cutting a real release in that state
+produces a citable, default-installable zip (`pgxn install` needs no special
+flags to fetch a `stable` release) that can't actually be built by anyone who
+downloads it from PGXN.
+
+**Before starting step 1 below**, grep the `Makefile` for any
+`_GIT_REF`/`_GIT_SHA`-style pinned-dependency variables. If any exist, stop —
+either wait for the real dependency version to land on PGXN, or otherwise
+resolve the pin, before proceeding.
+
+`bin/in_release` exists to help catch this: it exits true when
+`HISTORY.asc`'s top heading is a real version number rather than the
+`STABLE` placeholder used while changes are still accumulating (see
+"Ongoing development" below) — i.e., true exactly when we're sitting at (or
+about to cut) a release rather than mid-development. A pin existing while
+`bin/in_release` is true is exactly the state to avoid. This isn't wired into
+CI yet — that would need a generic, machine-checkable way to know "a pin
+exists" across whatever dependency needs one at the time, not just
+`cat_tools` specifically — so for now it's a manual check.
+
 ## Ongoing development (every PR, between releases)
 
 Keep the next release ready to cut at any time:
@@ -40,7 +67,9 @@ a changelog or an upgrade path from scratch under time pressure.
    **Caveat:** as of this writing, CI passing doesn't actually mean the test
    suite passed — see "CI doesn't fail on test failures" below. Until that's
    fixed, also eyeball the actual `pg_regress` output in the CI logs (or run
-   `make test` locally), not just the green checkmark.
+   `make test` locally), not just the green checkmark. **Also check for a
+   dependency pin** — see "Critical: never cut a release while a dependency
+   is pinned to a git source" above — before proceeding.
 
 2. Rename the accumulated `STABLE` markers to the real version number:
    - Edit `META.in.json`: bump the top-level `version` field AND the matching

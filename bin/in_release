@@ -1,0 +1,9 @@
+#!/bin/sh
+# True (exit 0) when HISTORY.asc's top heading is a real released version
+# number rather than the `STABLE` placeholder used while changes are still
+# accumulating toward the next release -- i.e., true exactly when we're
+# sitting at (or about to cut) a release rather than mid-development. See
+# RELEASE.md.
+set -eu
+cd "$(dirname "$0")/.."
+[ "$(head -n1 HISTORY.asc)" != "STABLE" ]
