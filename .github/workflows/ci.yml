@@ -164,7 +164,15 @@ jobs:
       - name: Check out the repo
         uses: actions/checkout@v7
       - name: Test on PostgreSQL ${{ matrix.pg }}
-        run: pg-build-test
+        # pgxntool's base.mk marks installcheck .IGNORE, so a plain `make
+        # test` (what pg-build-test itself invokes under the hood) exits 0
+        # even when every pg_regress test fails -- confirmed happening for
+        # real on PRs #6/#7 (RELEASE.md). `make verify-results` is the
+        # actual pass/fail signal (it scans for raw pgTAP failures and plan
+        # mismatches, not just installcheck's own exit code), so run it
+        # explicitly after `make test` instead of relying on pg-build-test
+        # alone.
+        run: make test && make verify-results
 
   # Proves extension_drop survives a BINARY pg_upgrade (in-place catalog
   # migration to a newer PostgreSQL major), not just a fresh install. Each
