@@ -1,5 +1,4 @@
 \set ECHO none
-\set TEST_SCHEMA _test_ed
 \i test/pgxntool/setup.sql
 
 SELECT plan(
@@ -48,17 +47,24 @@ SELECT lives_ok(
 );
 
 /*
- * Check search path for add command
+ * These calls used to be schema-qualified (_test_ed.extension_drop__remove
+ * etc.) back when this file's own per-test deps.sql install put
+ * extension_drop in a private schema and then this section intentionally
+ * moved search_path away from it, to prove a qualified call still worked.
+ * extension_drop is now installed once, ambiently (in public, see
+ * test/install/load.sql), by the time this file runs -- 'public' is always
+ * on search_path regardless of the change below, so there's no longer a
+ * schema this file controls to qualify against here. Proving
+ * schema-qualified access explicitly is test/sql/schema.sql's job now.
  */
--- Intentionally change our search path
 SET search_path = "$user", public, tap;
 
 SELECT lives_ok(
-  $$SELECT _test_ed.extension_drop__remove('extension_drop_test')$$
+  $$SELECT extension_drop__remove('extension_drop_test')$$
   , 'Drop extension command'
 );
 SELECT lives_ok(
-  $$SELECT _test_ed.extension_drop__add('extension_drop_test', 'moo')$$
+  $$SELECT extension_drop__add('extension_drop_test', 'moo')$$
   , 'Add extension command'
 );
 
@@ -70,7 +76,7 @@ SELECT throws_ok(
 );
 
 SELECT lives_ok(
-  $$SELECT _test_ed.extension_drop__remove('extension_drop_test')$$
+  $$SELECT extension_drop__remove('extension_drop_test')$$
   , 'Drop extension command'
 );
 SELECT lives_ok(
