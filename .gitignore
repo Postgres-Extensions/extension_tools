@@ -17,7 +17,12 @@ control.mk
 .deps/
 
 # built targets
-# Note: Version-specific files (sql/*--*.sql) are now tracked in git and should be committed
+# Note: Version-specific files (sql/*--*.sql) are tracked in git and should be
+# committed once a version is really released (immutable from then on) --
+# except sql/extension_drop--stable.sql, which is just a mechanical copy of
+# sql/extension_drop.sql for as long as default_version is the stable
+# pseudo-version, so committing it would just duplicate that file.
+sql/extension_drop--stable.sql
 
 # Test artifacts
 results/
