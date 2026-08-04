@@ -16,7 +16,11 @@
     "name": "extension_drop",
 
     "X_comment": "REQUIRED. Version of the distribution. http://pgxn.org/spec/#version",
-    "version": "1.0.0",
+    "X_comment": "This must match the last REAL released version -- 0.1.1 (2017) -- not an",
+    "X_comment": "aspirational in-progress one. It only advances at actual release time (see",
+    "X_comment": "RELEASE.md step 2); meanwhile extension_drop.control's default_version and",
+    "X_comment": "sql/extension_drop--stable.sql track ongoing, not-yet-released work.",
+    "version": "0.1.1",
 
     "X_comment": "REQUIRED. Short description of distribution.",
     "abstract": "Run custom commands when an extension is dropped.",
@@ -41,7 +45,7 @@
             "file": "sql/extension_drop.sql",
 
             "X_comment": "REQUIRED. Version the extension is at.",
-            "version": "1.0.0",
+            "version": "0.1.1",
 
             "X_comment": "Optional: \"abstract\": Description of the extension.",
             "abstract": "Run custom commands when an extension is dropped.",
