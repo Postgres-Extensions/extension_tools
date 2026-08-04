@@ -9,7 +9,32 @@ on:
     branches: [master]
   pull_request:
 jobs:
+  # Style linter (https://github.com/Postgres-Extensions/linter, vendored at
+  # .vendor/linter). Deliberately checked out WITHOUT submodules -- `make
+  # lint` is the same command a developer runs locally, and lint.mk
+  # self-initializes the submodule on first use (see its comment). Using the
+  # exact same entry point here is what actually proves that self-init works,
+  # rather than papering over it with a submodules: true checkout. The
+  # linter's own test suite (fixtures + scanner edge cases) is that repo's
+  # own CI's job, not this one's. No PostgreSQL needed -- sql-lint is a
+  # standalone Perl script -- so this doesn't use the pgxn-tools container.
+  lint:
+    name: 🧹 SQL Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v5
+      - name: Lint SQL
+        run: make lint
+
   test:
+    # Gated behind lint: the 12-leg PG matrix below is comparatively
+    # expensive, and every leg would fail anyway on a baseline that's already
+    # broken by a lint violation. success() is required explicitly once a
+    # job's `if:` references anything -- GitHub only assumes success() as a
+    # default when no `if:` is written at all.
+    needs: [lint]
+    if: success()
     strategy:
       matrix:
         pg: [17, 16, 15, 14, 13, 12, 11, 10, 9.6, 9.5, 9.4, 9.3]
@@ -30,7 +55,7 @@ jobs:
   # job succeeded or was skipped (e.g. a docs-only push with paths-ignore) and
   # fails if any failed or were cancelled.
   all-checks-passed:
-    needs: [test]
+    needs: [lint, test]
     if: always()
     runs-on: ubuntu-latest
     steps:
