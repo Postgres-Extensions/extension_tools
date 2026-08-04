@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+#
+# assert_fs_clean - Verify no stray PostgreSQL extension control files exist
+# on disk, to prove an extension (and its dependencies) were deployed purely
+# via pg_tle (AWS's Trusted Language Extensions), not a filesystem install.
+#
+# A pre-existing filesystem *.control file silently wins over a pg_tle-
+# registered extension of the same name -- PostgreSQL never reports an
+# error, it just quietly resolves CREATE EXTENSION from disk instead of
+# pg_tle's catalog. That makes "prove pg_tle-only" a real, load-bearing
+# assertion, not a formality: it must run AFTER whatever step it's guarding,
+# not just before, since the whole point is confirming nothing wrote to disk
+# THROUGHOUT the guarded flow, not merely that the environment started
+# clean.
+#
+# Deliberately generic over extension name: it diffs the FULL set of
+# *.control files against a baseline, so it catches a stray install of ANY
+# extension (extension_drop, cat_tools, or something unrelated), not just a
+# hardcoded name list -- a chained dependency doesn't need its own entry
+# here.
+#
+# Modeled on cat_tools's bin/assert_fs_clean.
+#
+# USAGE: bin/assert_fs_clean <subcommand> [args]
+#
+#   snapshot PG_MAJOR BASELINE_FILE
+#       Record the current *.control files in PG_MAJOR's extension directory
+#       to BASELINE_FILE. Run this BEFORE installing pg_tle (or anything
+#       else that could write to disk), so whatever ships by default (e.g.
+#       contrib, pgTAP installed as the test harness's own dependency) is
+#       excluded automatically -- no hardcoded exclude list to keep in sync.
+#
+#   verify PG_MAJOR BASELINE_FILE
+#       Fail if any *.control file exists now that wasn't in BASELINE_FILE,
+#       other than pg_tle.control itself (the one legitimate filesystem
+#       install in this flow). Run this after EVERY step that could
+#       plausibly have written extension files to disk.
+set -euo pipefail
+
+extdir_of() { echo "/usr/share/postgresql/$1/extension"; }
+
+snapshot() {
+  local pg_major=$1 baseline=$2
+  find "$(extdir_of "$pg_major")" -maxdepth 1 -name '*.control' | sort > "$baseline"
+}
+
+verify() {
+  local pg_major=$1 baseline=$2
+  local after
+  after=$(mktemp)
+  # Bake the actual path into the trap string now (double-quoted expansion),
+  # rather than deferring expansion to whenever the trap fires -- a RETURN
+  # trap wouldn't fire at all under `set -e` (this script's own errexit), and
+  # a single-quoted EXIT trap referencing $after by name would break once
+  # this function returns and $after (declared local) goes out of scope.
+  trap "rm -f '$after'" EXIT
+  local new
+  find "$(extdir_of "$pg_major")" -maxdepth 1 -name '*.control' | sort > "$after"
+  new=$(comm -13 "$baseline" "$after" | grep -vx '.*/pg_tle\.control' || true)
+  if [ -n "$new" ]; then
+    echo "FAIL: unexpected extension control file(s) on disk (everything but pg_tle must be registered via pg_tle, not filesystem-installed):" >&2
+    echo "$new" >&2
+    exit 1
+  fi
+  echo "OK: no stray extension control files on disk (PG $pg_major)"
+}
+
+usage() {
+  echo "usage: bin/assert_fs_clean <subcommand> [args]" >&2
+  echo "  snapshot PG_MAJOR BASELINE_FILE" >&2
+  echo "  verify PG_MAJOR BASELINE_FILE" >&2
+  exit 2
+}
+
+main() {
+  local cmd=${1:-}
+  shift || true
+  case "$cmd" in
+    snapshot) snapshot "$@" ;;
+    verify)   verify "$@" ;;
+    *)        usage ;;
+  esac
+}
+
+main "$@"
