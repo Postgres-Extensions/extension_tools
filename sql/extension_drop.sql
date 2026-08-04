@@ -316,3 +316,4 @@ DROP FUNCTION __extension_drop.exec(
 DROP SCHEMA __extension_drop;
 
 -- vim: sw=2 ts=2 expandtab
+/* deliberate test violation for CI verification */
