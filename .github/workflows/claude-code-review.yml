@@ -84,6 +84,15 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
           persist-credentials: false
+          # actions/checkout v4.4.0+ (backported to all major-version tags,
+          # https://github.blog/changelog/2026-06-18-safer-pull_request_target-defaults-for-github-actions-checkout/)
+          # refuses to check out a fork PR's head under pull_request_target
+          # unless this is explicitly set — the action can't see that the
+          # job-level `if:` above has already restricted this entire job to
+          # the trusted jnasbyupgrade fork. That gate, plus never building or
+          # executing the checked-out code (see SECURITY note above), is the
+          # safeguard this flag is asking us to confirm we have.
+          allow-unsafe-pr-checkout: true
 
       - name: Run Claude Code Review
         if: steps.gate.outputs.decision == 'run'
