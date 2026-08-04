@@ -11,12 +11,14 @@ PGXNTOOL_ENABLE_TEST_INSTALL = yes
 #   - update: CREATE EXTENSION at TEST_UPDATE_FROM, then ALTER EXTENSION
 #     UPDATE -- to TEST_UPDATE_TO if set, otherwise to the current version.
 #     Running the SAME suite/expected output against the result asserts
-#     update behaves identically to a fresh install. NOTE: extension_drop has
-#     never had a real second released version (PGXN's only listing is
-#     0.1.x from 2017, predating the current SQL entirely -- see HISTORY.asc
-#     and RELEASE.md), so TEST_UPDATE_FROM has no safe default; this mode is
-#     wired up and structurally ready, but there is nothing real to update
-#     FROM yet, and so no CI leg exercises it in this repo today.
+#     update behaves identically to a fresh install. TEST_UPDATE_FROM
+#     defaults to 0.1.1, extension_drop's last REAL published PGXN release
+#     (2017) -- its install script was recovered from PGXN's dist archive
+#     and committed as sql/extension_drop--0.1.1.sql (it was never in this
+#     repo's git history; see RELEASE.md and HISTORY.asc), with a matching
+#     update-diff script at sql/extension_drop--0.1.1--stable.sql. Empty
+#     TEST_UPDATE_TO (the default) means "update to the current
+#     default_version", which is now the `stable` pseudo-version.
 #   - existing: the extension is ALREADY installed (a real pg_upgrade, or an
 #     ALTER EXTENSION UPDATE done outside the suite). load.sql does not
 #     touch it; it only asserts presence + current version. Pair with
@@ -37,14 +39,16 @@ $(error TEST_LOAD_SOURCE must be 'fresh', 'update' or 'existing', got '$(TEST_LO
 endif
 
 # update-mode version range (load.sql only reads these in update mode).
-# Empty TEST_UPDATE_TO means "update to the current default_version". There
-# is no safe default for TEST_UPDATE_FROM (see above) -- require it
-# explicitly rather than pointing it at a version that doesn't exist.
-TEST_UPDATE_FROM ?=
+# Empty TEST_UPDATE_TO means "update to the current default_version" (now
+# `stable`). TEST_UPDATE_FROM defaults to 0.1.1, the actual recovered compat
+# floor -- still overridable (e.g. once a second real release ships) but no
+# longer required on every invocation. The guard below just protects against
+# someone explicitly blanking it out (TEST_UPDATE_FROM= on the command line).
+TEST_UPDATE_FROM ?= 0.1.1
 TEST_UPDATE_TO ?=
 ifeq ($(TEST_LOAD_SOURCE),update)
   ifeq ($(strip $(TEST_UPDATE_FROM)),)
-$(error TEST_UPDATE_FROM must be set when TEST_LOAD_SOURCE=update -- extension_drop has no prior released version yet to default it to)
+$(error TEST_UPDATE_FROM must not be blank when TEST_LOAD_SOURCE=update)
   endif
 endif
 
@@ -63,6 +67,18 @@ include pgxntool/base.mk
 # test/build/*.sql exists) so an accidental deletion of test/build/'s
 # contents is a hard error instead of the check silently disappearing.
 PGXNTOOL_ENABLE_TEST_BUILD = yes
+
+# The recovered real 0.1.1 install script (see sql/extension_drop--0.1.1.sql
+# and RELEASE.md) is a single-version file for a version that ISN'T the
+# current default_version ('stable'), so base.mk's DATA wildcard -- which
+# only picks up the CURRENT version file plus two-dash update-diff scripts,
+# not other historical single-version install files -- won't ship it on its
+# own. Without this, `pgxn install extension_drop` (or any local `make
+# install`) would silently stop being able to `CREATE EXTENSION extension_drop
+# VERSION '0.1.1'` at all, even though the update-diff script depends on that
+# exact file being installed. Same gap already filed as
+# Postgres-Extensions/pgxntool#48.
+DATA += sql/extension_drop--0.1.1.sql
 
 testdeps: test_extension
 test_extension: $(DESTDIR)$datadir)/extension/extension_drop_test.control $(wildcard $(TESTDIR)/*)
