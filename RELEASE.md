@@ -34,13 +34,35 @@ Keep the next release ready to cut at any time:
 This way, a release is just renaming things — see step 2 below — not writing
 a changelog or an upgrade path from scratch under time pressure.
 
+## Critical: never cut a release while CI needs a git-source dependency override
+
+The `Makefile`'s `cat_tools` target normally does a plain `pgxn install` — but
+CI currently sets `CAT_TOOLS_GIT_REF` (see `.github/workflows/ci.yml`'s
+top-level `env:`) to build cat_tools from a git ref instead, because PGXN's
+published cat_tools doesn't yet have the version this distribution actually
+requires. While that's true, `META.in.json`'s declared `cat_tools` floor
+isn't actually satisfiable via `pgxn install` — cutting a release in that
+state produces a real, publishable zip that can't actually be built by
+anyone who downloads it from PGXN.
+
+**Before starting step 1 below**, check whether `ci.yml` still sets
+`CAT_TOOLS_GIT_REF` (or `CAT_TOOLS_SKIP_INSTALL`) to a non-empty value. If it
+does, stop — wait for the real dependency version to land on PGXN (and
+revert `ci.yml`'s override back to unset) before proceeding. Checking
+`ci.yml`'s actual value is the real signal here, not whether the Makefile
+*declares* the variable — `CAT_TOOLS_GIT_REF` always exists in the Makefile
+now, as a normally-empty, opt-in override; its mere existence doesn't mean
+anything is pinned.
+
 ## Cutting a release
 
 1. Make sure `master` is in the state you want released, and CI is green.
    **Caveat:** as of this writing, CI passing doesn't actually mean the test
    suite passed — see "CI doesn't fail on test failures" below. Until that's
    fixed, also eyeball the actual `pg_regress` output in the CI logs (or run
-   `make test` locally), not just the green checkmark.
+   `make test` locally), not just the green checkmark. **Also check for a
+   dependency override** — see "Critical: never cut a release while CI needs
+   a git-source dependency override" above — before proceeding.
 
 2. Rename the accumulated `STABLE` markers to the real version number:
    - Edit `META.in.json`: bump the top-level `version` field AND the matching

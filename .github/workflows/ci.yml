@@ -8,6 +8,16 @@ on:
   push:
     branches: [master]
   pull_request:
+# CAT_TOOLS_GIT_REF is the Makefile's opt-in override (see its comment there)
+# to install cat_tools from a git ref instead of PGXN, for exactly this CI --
+# PGXN's published cat_tools is stuck at a stale 2017 release missing the
+# function extension_drop's SQL calls. Set at workflow level (not per-job) so
+# every job that builds/installs the extension, including ones in other
+# stacked PRs, picks it up automatically without its own copy of this value.
+# Revert this once cat_tools 0.3.0 is actually published to PGXN -- see
+# RELEASE.md's guardrail against cutting a release while this is still set.
+env:
+  CAT_TOOLS_GIT_REF: 0.3.0
 jobs:
   # Style linter (https://github.com/Postgres-Extensions/linter, vendored at
   # .vendor/linter). Deliberately checked out WITHOUT submodules -- `make
