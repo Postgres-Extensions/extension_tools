@@ -10,9 +10,10 @@
 # Each step is PROVEN, not assumed -- see advanced-extension-testing.md
 # section 4 (the dependency-guard technique) and section 6(d) (dynamic
 # version assertions, never hardcoded):
-#   1. CREATE EXTENSION extension_drop VERSION '0.1.1' CASCADE -- installs
-#      the recovered real historical release (CASCADE also pulls in
-#      cat_tools if not already present, matching test/install/load.sql).
+#   1. CREATE EXTENSION extension_drop VERSION '0.1.1' -- installs the
+#      recovered real historical release. CASCADE (to auto-install
+#      cat_tools) only exists from PG10 -- pre-PG10 needs cat_tools created
+#      explicitly first, same branch test/install/load.sql already uses.
 #   2. Plant a dependency-guard view and prove a non-CASCADE DROP EXTENSION
 #      is blocked -- BEFORE the update, proving the guard actually attaches
 #      to the 0.1.1-era extension_drop__commands table.
@@ -32,8 +33,17 @@ DB=${1:-extension_drop_update_test}
 dropdb --if-exists "$DB"
 createdb "$DB"
 
+PG10_PLUS=$(psql -tAc "SELECT current_setting('server_version_num')::int >= 100000" -d "$DB")
+
+if [ "$PG10_PLUS" = "t" ]; then
+  CREATE_EXTENSION_DROP="CREATE EXTENSION extension_drop VERSION '0.1.1' CASCADE;"
+else
+  CREATE_EXTENSION_DROP="CREATE EXTENSION IF NOT EXISTS cat_tools;
+CREATE EXTENSION extension_drop VERSION '0.1.1';"
+fi
+
 psql -v ON_ERROR_STOP=1 -d "$DB" -c "
-CREATE EXTENSION extension_drop VERSION '0.1.1' CASCADE;
+$CREATE_EXTENSION_DROP
 
 CREATE SCHEMA extension_drop_drop_guard;
 CREATE VIEW extension_drop_drop_guard.guard AS
