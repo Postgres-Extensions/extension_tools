@@ -22,7 +22,18 @@ concurrency:
 jobs:
   claude-review:
     # Trusted fork only, and skip drafts (don't spend API/CI on unfinished PRs).
-    # To add more trusted owners, extend the head-owner check.
+    #
+    # !!! SECURITY-CRITICAL -- DO NOT REMOVE OR WEAKEN THE head.repo.owner.login
+    # CHECK BELOW !!! It is the ONLY thing standing between an arbitrary external
+    # fork's PR and this job's write-capable GITHUB_TOKEN, CLAUDE_CODE_OAUTH_TOKEN,
+    # and -- now that the checkout step below sets allow-unsafe-pr-checkout: true --
+    # a checked-out copy of that fork's own code running in this trusted context.
+    # Drop or loosen this check and the checkout step's "safe because the job is
+    # already gated to a trusted fork" justification stops being true, turning this
+    # into a textbook "pwn request" vulnerability. To trust an additional fork,
+    # EXTEND this condition explicitly (e.g. `|| ... == 'other-trusted-account'`) --
+    # never replace it with something broader (a wildcard, a check on PR author
+    # instead of head repo owner, etc.).
     if: >-
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.owner.login == 'jnasbyupgrade'
