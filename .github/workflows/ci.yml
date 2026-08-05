@@ -165,6 +165,18 @@ jobs:
         uses: actions/checkout@v7
       - name: Test on PostgreSQL ${{ matrix.pg }}
         run: pg-build-test
+      # Real update-path leg (0.1.1, extension_drop's last REAL published PGXN
+      # release, recovered from PGXN's dist archive -- see
+      # sql/extension_drop--0.1.1.sql -> stable, current source): runs here as
+      # extra steps in the same already-running container/cluster rather than
+      # a separate job, since a whole extra job means a whole extra container
+      # boot + PostgreSQL startup for no isolation benefit -- nothing about
+      # this leg needs its own environment, unlike e.g. pg_tle's job, which
+      # genuinely does.
+      - name: "Prove the update path: install 0.1.1, plant guard, ALTER EXTENSION UPDATE, re-prove guard, assert version"
+        run: bin/test_update_path.sh
+      - name: Run the pgTAP suite in update mode (0.1.1 -> stable) against the result
+        run: make test-update
 
   # Proves extension_drop survives a BINARY pg_upgrade (in-place catalog
   # migration to a newer PostgreSQL major), not just a fresh install. Each
@@ -239,38 +251,13 @@ jobs:
         # migrated objects.
         run: bin/test_existing run-suite extension_drop_upgrade
 
-  # Real update-path leg: 0.1.1 (extension_drop's last REAL published PGXN
-  # release, 2017, recovered from PGXN's dist archive -- see
-  # sql/extension_drop--0.1.1.sql, RELEASE.md, HISTORY.asc) -> stable
-  # (current source). This is a SQL-level, PostgreSQL-version-agnostic
-  # concern -- extension_drop's install/update scripts have nothing
-  # catalog-version-sensitive in them (unlike e.g. pg_upgrade compatibility,
-  # which does need a version matrix) -- so this runs as a single job on the
-  # newest supported major rather than repeating the (a) job's whole PG
-  # matrix a second time.
-  extension-update-test:
-    name: 🔄 extension update test (0.1.1 → stable)
-    runs-on: ubuntu-latest
-    container: pgxn/pgxn-tools
-    steps:
-      - name: Start PostgreSQL
-        run: pg-start 17
-      - name: Check out the repo
-        uses: actions/checkout@v5
-      - name: Build and install extension_drop (and its cat_tools dependency)
-        run: make install
-      - name: "Prove the update path: install 0.1.1, plant guard, ALTER EXTENSION UPDATE, re-prove guard, assert version"
-        run: bin/test_update_path.sh
-      - name: Run the pgTAP suite in update mode (0.1.1 -> stable) against the result
-        run: make test-update
-
   # A single stable check name for use as a required status check in branch
   # protection. Matrix jobs produce names like "🐘 PostgreSQL 14" that change
   # with the matrix; this aggregates them into one. It passes if every needed
   # job succeeded or was skipped (e.g. a docs-only push skipping
   # pg-upgrade-test) and fails if any failed or were cancelled.
   all-checks-passed:
-    needs: [lint, changes, test, pg-upgrade-test, extension-update-test]
+    needs: [lint, changes, test, pg-upgrade-test]
     if: always()
     runs-on: ubuntu-latest
     steps:
