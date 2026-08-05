@@ -76,9 +76,15 @@ PGXNTOOL_ENABLE_TEST_BUILD = yes
 # own. Without this, `pgxn install extension_drop` (or any local `make
 # install`) would silently stop being able to `CREATE EXTENSION extension_drop
 # VERSION '0.1.1'` at all, even though the update-diff script depends on that
-# exact file being installed. Same gap already filed as
-# Postgres-Extensions/pgxntool#48.
-DATA += sql/extension_drop--0.1.1.sql
+# exact file being installed.
+#
+# NOTE: this used to need an explicit `DATA += sql/extension_drop--0.1.1.sql`
+# here (Postgres-Extensions/pgxntool#48) -- pgxntool 2.3.0 already includes
+# it in its own generated DATA list now that #48 is fixed upstream, so adding
+# it again duplicated the file in DATA and broke `make install` ("will not
+# overwrite just-created ... with ..."). Left this comment as a marker in
+# case a future pgxntool downgrade or DATA-generation change brings the gap
+# back -- verify with `make -s print-DATA` before assuming it's still needed.
 
 testdeps: test_extension
 test_extension: $(DESTDIR)$datadir)/extension/extension_drop_test.control $(wildcard $(TESTDIR)/*)
