@@ -9,8 +9,10 @@ name: Claude Code Review
 # write-capable token. The job is gated to PRs from the trusted `jnasbyupgrade`
 # fork only — an arbitrary external fork can never trigger this secret-bearing
 # job. The workflow file always comes from the base branch (master), so a PR
-# cannot modify the reviewer that runs on it. We check out the PR head only for
-# read context (persist-credentials: false) and never build or execute PR code.
+# cannot modify the reviewer that runs on it. This workflow never checks out
+# the PR's own ref into the workspace (see the checkout step below) --
+# claude-code-action fetches and reads the PR's content itself, safely, and
+# never builds or executes it.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -25,12 +27,9 @@ jobs:
     #
     # !!! SECURITY-CRITICAL -- DO NOT REMOVE OR WEAKEN THE head.repo.owner.login
     # CHECK BELOW !!! It is the ONLY thing standing between an arbitrary external
-    # fork's PR and this job's write-capable GITHUB_TOKEN, CLAUDE_CODE_OAUTH_TOKEN,
-    # and -- now that the checkout step below sets allow-unsafe-pr-checkout: true --
-    # a checked-out copy of that fork's own code running in this trusted context.
-    # Drop or loosen this check and the checkout step's "safe because the job is
-    # already gated to a trusted fork" justification stops being true, turning this
-    # into a textbook "pwn request" vulnerability. To trust an additional fork,
+    # fork's PR and this job's write-capable GITHUB_TOKEN and
+    # CLAUDE_CODE_OAUTH_TOKEN. Drop or loosen this check and any fork can trigger
+    # a job that runs with this repo's secrets. To trust an additional fork,
     # EXTEND this condition explicitly (e.g. `|| ... == 'other-trusted-account'`) --
     # never replace it with something broader (a wildcard, a check on PR author
     # instead of head repo owner, etc.).
@@ -85,25 +84,26 @@ jobs:
           echo "decision=$decision" >> "$GITHUB_OUTPUT"
           echo "gate decision: $decision"
 
-      - name: Check out PR head (read-only context)
+      - name: Check out base branch
         if: steps.gate.outputs.decision == 'run'
+        # Deliberately NO ref:/repository: override -- this checks out this
+        # repo's own base branch (master), not the PR's fork/ref. Checking
+        # out an untrusted PR ref into the workspace root before this action
+        # is exactly the anti-pattern anthropics/claude-code-action's own
+        # docs/security.md warns against; its "preferred" pattern is a plain
+        # checkout of the base ref, nothing more. claude-code-action fetches
+        # and reviews the PR's actual content itself, from ITS OWN internal
+        # logic (see its src/github/operations/branch.ts): for a fork PR it
+        # fetches origin's refs/pull/<n>/head -- a ref GitHub maintains on
+        # THIS repo for any PR, fork or not, so it never needs direct access
+        # to the fork's own remote at all. That's why this step must leave
+        # `origin` pointing at this repo (the default) rather than being
+        # redirected to the fork: an earlier version of this step did that,
+        # which broke the action's own internal fetch ("couldn't find remote
+        # ref pull/<n>/head") since that ref doesn't exist on the fork.
         # Intentionally tracks the major-version tag (not a pinned SHA) so
         # upstream fixes are picked up automatically.
         uses: actions/checkout@v7
-        with:
-          repository: ${{ github.event.pull_request.head.repo.full_name }}
-          ref: ${{ github.event.pull_request.head.sha }}
-          fetch-depth: 1
-          persist-credentials: false
-          # actions/checkout v4.4.0+ (backported to all major-version tags,
-          # https://github.blog/changelog/2026-06-18-safer-pull_request_target-defaults-for-github-actions-checkout/)
-          # refuses to check out a fork PR's head under pull_request_target
-          # unless this is explicitly set — the action can't see that the
-          # job-level `if:` above has already restricted this entire job to
-          # the trusted jnasbyupgrade fork. That gate, plus never building or
-          # executing the checked-out code (see SECURITY note above), is the
-          # safeguard this flag is asking us to confirm we have.
-          allow-unsafe-pr-checkout: true
 
       - name: Run Claude Code Review
         if: steps.gate.outputs.decision == 'run'
