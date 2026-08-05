@@ -72,13 +72,13 @@
     "X_comment": "Optional. 'prereqs': Prerequisits for the distribution. http://pgxn.org/spec/#prereqs",
     "X_comment": "Valid keys for 'prereqs' are configure, build, runtime, or test.",
     "X_comment": "Valid keys for 'requires' are requires, recommends, suggests, or conflicts.",
-    "X_comment": "Requires event_triggers, introduced in 9.3",
+    "X_comment": "PostgreSQL floor matches cat_tools's own declared requirement",
     "X_comment": "cat_tools: requires extension support, added in 0.2.1",
     "prereqs": {
 
         "build": {
             "requires": {
-                "PostgreSQL": "9.3.0",
+                "PostgreSQL": "12.0",
                 "cat_tools": "0.2.1"
             }
         },
