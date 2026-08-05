@@ -22,7 +22,18 @@ concurrency:
 jobs:
   claude-review:
     # Trusted fork only, and skip drafts (don't spend API/CI on unfinished PRs).
-    # To add more trusted owners, extend the head-owner check.
+    #
+    # !!! SECURITY-CRITICAL -- DO NOT REMOVE OR WEAKEN THE head.repo.owner.login
+    # CHECK BELOW !!! It is the ONLY thing standing between an arbitrary external
+    # fork's PR and this job's write-capable GITHUB_TOKEN, CLAUDE_CODE_OAUTH_TOKEN,
+    # and -- now that the checkout step below sets allow-unsafe-pr-checkout: true --
+    # a checked-out copy of that fork's own code running in this trusted context.
+    # Drop or loosen this check and the checkout step's "safe because the job is
+    # already gated to a trusted fork" justification stops being true, turning this
+    # into a textbook "pwn request" vulnerability. To trust an additional fork,
+    # EXTEND this condition explicitly (e.g. `|| ... == 'other-trusted-account'`) --
+    # never replace it with something broader (a wildcard, a check on PR author
+    # instead of head repo owner, etc.).
     if: >-
       github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.owner.login == 'jnasbyupgrade'
@@ -84,6 +95,15 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
           persist-credentials: false
+          # actions/checkout v4.4.0+ (backported to all major-version tags,
+          # https://github.blog/changelog/2026-06-18-safer-pull_request_target-defaults-for-github-actions-checkout/)
+          # refuses to check out a fork PR's head under pull_request_target
+          # unless this is explicitly set — the action can't see that the
+          # job-level `if:` above has already restricted this entire job to
+          # the trusted jnasbyupgrade fork. That gate, plus never building or
+          # executing the checked-out code (see SECURITY note above), is the
+          # safeguard this flag is asking us to confirm we have.
+          allow-unsafe-pr-checkout: true
 
       - name: Run Claude Code Review
         if: steps.gate.outputs.decision == 'run'
@@ -95,6 +115,13 @@ jobs:
           # pull_request_target. GITHUB_TOKEN is repo/workflow-scoped (independent
           # of the actor's role) and has pull-requests: write here.
           github_token: ${{ secrets.GITHUB_TOKEN }}
+          # A `prompt:` input puts the action in "automation mode", which by
+          # default posts nothing until the whole run finishes -- there's no
+          # visibility into a review that runs long. track_progress forces a
+          # tracking PR comment with a live checklist that updates as Claude
+          # works, so a slow run is visible instead of silent. (Pattern
+          # modeled on Postgres-Extensions/cat_tools PR #69.)
+          track_progress: true
           # NOTE: plugin_marketplaces can't be pinned — it tracks the
           # marketplace repo's default branch (upstream anthropics/claude-code).
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
