@@ -37,7 +37,10 @@ jobs:
     if: success()
     strategy:
       matrix:
-        pg: [17, 16, 15, 14, 13, 12, 11, 10, 9.6, 9.5, 9.4, 9.3]
+        # Floor matches cat_tools's own declared PostgreSQL requirement
+        # (12.0, see its META.in.json) -- extension_drop depends on
+        # cat_tools, so it was never really going to work below that either.
+        pg: [17, 16, 15, 14, 13, 12]
     name: 🐘 PostgreSQL ${{ matrix.pg }}
     runs-on: ubuntu-latest
     container: pgxn/pgxn-tools
