@@ -6,13 +6,15 @@ name: Claude Code Review
 # `pull_request` version never worked for fork PRs.
 #
 # SECURITY: pull_request_target runs in the BASE repo with secrets and a
-# write-capable token. The job is gated to PRs from the trusted `jnasbyupgrade`
-# fork only — an arbitrary external fork can never trigger this secret-bearing
-# job. The workflow file always comes from the base branch (master), so a PR
-# cannot modify the reviewer that runs on it. This workflow never checks out
-# the PR's own ref into the workspace (see the checkout step below) --
-# claude-code-action fetches and reads the PR's content itself, safely, and
-# never builds or executes it.
+# write-capable token. The job is gated to PRs authored by jnasbyupgrade only
+# — github.event.pull_request.user.login is the PR's original author and
+# can't be spoofed by PR content, so this check holds regardless of whether
+# the PR head lives in this repo or an external fork. The workflow file
+# always comes from the base branch (master), so a PR cannot modify the
+# reviewer that runs on it. This workflow never checks out the PR's own ref
+# into the workspace (see the checkout step below) -- claude-code-action
+# fetches and reads the PR's content itself, safely, and never builds or
+# executes it.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
@@ -23,19 +25,28 @@ concurrency:
 
 jobs:
   claude-review:
-    # Trusted fork only, and skip drafts (don't spend API/CI on unfinished PRs).
+    # jnasbyupgrade's own PRs only, and skip drafts (don't spend API/CI on
+    # unfinished PRs).
     #
-    # !!! SECURITY-CRITICAL -- DO NOT REMOVE OR WEAKEN THE head.repo.owner.login
-    # CHECK BELOW !!! It is the ONLY thing standing between an arbitrary external
-    # fork's PR and this job's write-capable GITHUB_TOKEN and
-    # CLAUDE_CODE_OAUTH_TOKEN. Drop or loosen this check and any fork can trigger
-    # a job that runs with this repo's secrets. To trust an additional fork,
-    # EXTEND this condition explicitly (e.g. `|| ... == 'other-trusted-account'`) --
-    # never replace it with something broader (a wildcard, a check on PR author
-    # instead of head repo owner, etc.).
+    # !!! SECURITY-CRITICAL -- DO NOT REMOVE OR WEAKEN THE user.login CHECK
+    # BELOW !!! It is the ONLY thing standing between an arbitrary external
+    # actor's PR and this job's write-capable GITHUB_TOKEN and
+    # CLAUDE_CODE_OAUTH_TOKEN. Drop or loosen this check and any PR can
+    # trigger a job that runs with this repo's secrets. NOTE: this used to
+    # check head.repo.owner.login (the owner of the fork the PR head lives
+    # in), but that only distinguishes forks -- for an upstream-branch-headed
+    # PR (base and head both in this repo, e.g. from `gh stack` or a plain
+    # `gh pr create` without a fork) it's always this repo's own org,
+    # regardless of who actually opened the PR, so it silently skipped review
+    # on every such PR. github.event.pull_request.user.login is the PR's
+    # actual author and can't be spoofed by PR content either, and it
+    # correctly covers both fork-headed and upstream-branch-headed PRs. To
+    # trust an additional author, EXTEND this condition explicitly (e.g.
+    # `|| ... == 'other-trusted-account'`) -- never replace it with something
+    # broader (a wildcard, etc.).
     if: >-
       github.event.pull_request.draft == false &&
-      github.event.pull_request.head.repo.owner.login == 'jnasbyupgrade'
+      github.event.pull_request.user.login == 'jnasbyupgrade'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
