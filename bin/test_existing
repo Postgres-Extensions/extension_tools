@@ -64,16 +64,16 @@
 # `DROP EXTENSION extension_drop;`) would fail against a guarded database,
 # not because of a bug, but because the guard is doing exactly its job.
 # Confirmed hitting this running the flow locally (PG12->PG17): schema.sql's
-# first statement failed with the guard's own 2BP01 error, and
-# test/sql/zzz_build.sql (which CASCADE-drops extension_drop to test the raw
-# install script in isolation) still passes but adds a
-# "drop cascades to view ..." NOTICE that isn't in the checked-in expected
-# output for a run with no guard present. Neither is a regression in either
-# test file -- both already run, and are already proven, by the regular fresh
-# `test` job on every PostgreSQL major. Existing mode's job is different:
-# prove the SURVIVING install still works and wasn't silently reinstalled,
-# which dependency_guard.sql + simple.sql already cover. So both are excluded
-# from the existing-mode REGRESS list here, not papered over.
+# first statement failed with the guard's own 2BP01 error. Not a regression --
+# schema.sql already runs, and is already proven, by the regular fresh `test`
+# job on every PostgreSQL major. Existing mode's job is different: prove the
+# SURVIVING install still works and wasn't silently reinstalled, which
+# dependency_guard.sql + simple.sql already cover. So it's excluded from the
+# existing-mode REGRESS list here, not papered over. (test/sql/zzz_build.sql
+# used to be excluded for a similar reason -- it's since been migrated to
+# pgxntool's native test/build/ feature, which runs as its own separate
+# installcheck invocation entirely outside the main REGRESS list, so there's
+# nothing left here to exclude it from.)
 set -euo pipefail
 
 # Run from the repository root (where `make` works and test paths resolve),
@@ -94,13 +94,13 @@ cd "$(dirname "$(readlink -f "$0")")/.."
 GUARD_SCHEMA=extension_drop_ci_guard
 GUARD_VIEW=guard
 
-# See the top-of-file comment: schema.sql and zzz_build.sql are excluded from
-# the existing-mode suite run, not because they're broken, but because their
-# own jobs are inherently incompatible with (schema.sql) or produce expected-
-# output-irrelevant noise against (zzz_build.sql) a real, persistent
-# dependency guard. Both already run, and are already proven, by the regular
-# fresh `test` job on every PostgreSQL major.
-EXISTING_MODE_EXCLUDE="schema zzz_build"
+# See the top-of-file comment: schema.sql is excluded from the existing-mode
+# suite run, not because it's broken, but because its own job (freely
+# DROPping and recreating extension_drop in several schemas) is inherently
+# incompatible with a real, persistent dependency guard. It already runs,
+# and is already proven, by the regular fresh `test` job on every
+# PostgreSQL major.
+EXISTING_MODE_EXCLUDE="schema"
 
 # ---------------------------------------------------------------------------
 # psql helpers
@@ -234,14 +234,15 @@ run_suite() {
   # In existing mode pg_regress runs against $db via --use-existing and must
   # NOT create/drop its own database. Two consequences drive the make args
   # below (see ~/advanced-extension-testing.md §5, and pgxntool base.mk):
-  #   1. PGXNTOOL_ENABLE_TEST_BUILD=no: harmless here (this repo has no
-  #      test/build/ directory, so it already auto-detects to "no"), kept
-  #      explicit to match the documented existing-mode invocation and guard
-  #      against a future test/build/ addition breaking this flow silently.
+  #   1. PGXNTOOL_ENABLE_TEST_BUILD=no: this repo now has a test/build/
+  #      directory (pgxntool's native build-sanity check), which would
+  #      otherwise auto-enable and try to re-install/rebuild against this
+  #      existing database as a side effect -- exactly the kind of
+  #      filesystem-touching step existing mode exists to avoid.
   #   2. verify-results depends on `test`, so it re-runs the suite; it must
   #      carry the SAME existing-mode overrides (including REGRESS) or it
-  #      would re-run the FULL suite (hitting the schema.sql/zzz_build.sql
-  #      conflict above) instead of verifying THIS existing database.
+  #      would re-run the FULL suite (hitting the schema.sql conflict above)
+  #      instead of verifying THIS existing database.
   # An ARRAY, not a flat string: REGRESS's value is itself multiple
   # space-separated test names, so passing it through a single unquoted
   # variable (like cat_tools's own $existing_args, which never needed a
