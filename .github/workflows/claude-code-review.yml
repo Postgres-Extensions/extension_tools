@@ -42,6 +42,11 @@ jobs:
       contents: read
       pull-requests: write   # post the review comments
       checks: read           # read sibling check-runs for the cost gate
+      actions: write         # lets a step save its Actions cache -- there is no
+                              # narrower cache-write-only scope; without this the
+                              # job still succeeds but silently fails to cache,
+                              # logging "Cache reservation failed: cache write
+                              # denied: token has no writable scopes" every run
     steps:
       # COST GATE: the paid Claude review is the last thing to run. Wait for the
       # PR head's OTHER check-runs to finish and only proceed if they are clean.
@@ -122,6 +127,16 @@ jobs:
           # works, so a slow run is visible instead of silent. (Pattern
           # modeled on Postgres-Extensions/cat_tools PR #69.)
           track_progress: true
+          # A bare `prompt:` (no `@claude` mention) runs the action in "agent
+          # mode", which decides which MCP servers to start by scanning an
+          # --allowedTools flag inside claude_args -- it does NOT consult the
+          # invoked plugin's own allowed-tools frontmatter. Without this, the
+          # github_inline_comment MCP server never starts, so the tool the
+          # code-review plugin needs for real per-line inline comments doesn't
+          # exist in this session at all -- not blocked, absent. The plugin
+          # silently falls back to one consolidated PR comment instead, with
+          # no error/warning. (Found in Postgres-Extensions/cat_tools PR #62.)
+          claude_args: '--allowedTools mcp__github_inline_comment__create_inline_comment'
           # NOTE: plugin_marketplaces can't be pinned — it tracks the
           # marketplace repo's default branch (upstream anthropics/claude-code).
           plugin_marketplaces: 'https://github.com/anthropics/claude-code.git'
