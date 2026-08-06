@@ -2,6 +2,9 @@
 BEGIN;
 \i test/pgxntool/psql.sql
 
+-- Install dependencies (via CREATE EXTENSION, not \i -- this is a real,
+-- already-published dependency being installed normally, not the extension
+-- whose raw install script this file exists to test line-by-line below).
 CREATE EXTENSION IF NOT EXISTS cat_tools;
 
 /*
