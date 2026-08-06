@@ -1,5 +1,10 @@
 include pgxntool/base.mk
 
+# Explicit rather than relying on auto-detect (which enables this whenever
+# test/build/*.sql exists) so an accidental deletion of test/build/'s
+# contents is a hard error instead of the check silently disappearing.
+PGXNTOOL_ENABLE_TEST_BUILD = yes
+
 testdeps: test_extension
 test_extension: $(DESTDIR)$datadir)/extension/extension_drop_test.control $(wildcard $(TESTDIR)/*)
 $(DESTDIR)$datadir)/extension/extension_drop_test.control:
