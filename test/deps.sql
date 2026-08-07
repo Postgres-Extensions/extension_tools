@@ -10,8 +10,14 @@ SET client_min_messages = NOTICE;
 \set TT extension_drop_test_table
 CREATE TEMP TABLE :TT (i int);
 
-CREATE SCHEMA :TEST_SCHEMA;
-SET search_path = :TEST_SCHEMA, tap, "$user";
+/*
+ * :TEST_SCHEMA can be mixed-case (see test/sql/schema.sql), so it MUST be
+ * identifier-quoted here -- an unquoted interpolation would silently fold
+ * to lowercase and every test would end up running against a different,
+ * unquoted schema than the one it thinks it's using.
+ */
+CREATE SCHEMA :"TEST_SCHEMA";
+SET search_path = :"TEST_SCHEMA", tap, "$user";
 
 /*
  * Now load our extension. We don't use IF NOT EXISTs here because we want an
