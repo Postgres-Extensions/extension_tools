@@ -120,6 +120,14 @@ jobs:
         # Intentionally tracks the major-version tag (not a pinned SHA) so
         # upstream fixes are picked up automatically.
         uses: actions/checkout@v7
+        with:
+          # This job's permissions include pull-requests: write, a real
+          # write-capable credential -- nothing here legitimately runs `git
+          # push` (review comments post via the API/claude-code-action, not
+          # git), so there's no reason to leave that credential sitting in
+          # .git/config for the rest of the job to misuse if anything later
+          # goes wrong.
+          persist-credentials: false
 
       - name: Run Claude Code Review
         if: steps.gate.outputs.decision == 'run'
