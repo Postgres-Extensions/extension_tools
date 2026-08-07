@@ -76,7 +76,6 @@ SELECT
   , :'extension_drop_test_load_mode' = 'existing' AS extension_drop_mode_existing
 \gset
 
-\if :extension_drop_mode_existing
 /*
  * existing mode: do NOT touch the extension. Assert it is installed and at
  * the current default_version -- the pg_upgrade / external update the
@@ -84,6 +83,7 @@ SELECT
  * dropping or reinstalling it would defeat the test. Fail loudly on absence
  * or mismatch.
  */
+\if :extension_drop_mode_existing
 DO $DO$
 DECLARE
   v_installed text := (SELECT extversion FROM pg_extension WHERE extname = 'extension_drop');
@@ -100,7 +100,6 @@ BEGIN
   END IF;
 END
 $DO$;
-\else
 /*
  * fresh / update: (re)install from scratch. Drop-first (CASCADE, matching
  * cat_tools' own load.sql) so a re-run on a persistent cluster installs the
@@ -115,11 +114,13 @@ $DO$;
  * calls below without needing psql variables interpolated inside a
  * dollar-quoted DO body.
  */
+\else
 DROP EXTENSION IF EXISTS extension_drop CASCADE;
 
 SELECT current_setting('server_version_num')::int >= 100000 AS extension_drop_pg10_plus
 \gset
 
+-- update mode: install at the OLD version, then ALTER EXTENSION UPDATE below.
 \if :extension_drop_mode_update
 SELECT current_setting('extension_drop.test_update_from') AS extension_drop_test_update_from \gset
 SELECT current_setting('extension_drop.test_update_to')   AS extension_drop_test_update_to   \gset
@@ -146,6 +147,7 @@ CREATE EXTENSION extension_drop VERSION :'extension_drop_test_update_from';
 SET client_min_messages = ERROR;
 ALTER EXTENSION extension_drop UPDATE :extension_drop_update_to_clause;
 SET client_min_messages = WARNING;
+-- fresh mode: plain CREATE EXTENSION at the current version.
 \else
 \if :extension_drop_pg10_plus
 CREATE EXTENSION extension_drop CASCADE;
@@ -153,9 +155,9 @@ CREATE EXTENSION extension_drop CASCADE;
 CREATE EXTENSION IF NOT EXISTS cat_tools;
 CREATE EXTENSION extension_drop;
 \endif
-\endif
 -- end \if :extension_drop_mode_update (fresh vs. update install branch)
 \endif
 -- end \if :extension_drop_mode_existing (existing mode skips the whole (re)install block)
+\endif
 
 -- vi: expandtab ts=2 sw=2
