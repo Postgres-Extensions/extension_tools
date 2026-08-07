@@ -8,8 +8,8 @@
  * pgxntool's test/install feature runs this file COMMITTED, in its own
  * pg_regress session, BEFORE the main pgTAP suite, so the extension persists
  * into every (rolled-back) test/sql/ file instead of each one re-installing
- * it from scratch. test/deps.sql (run per test) no longer creates the
- * extension; it only sets the psql variables the suite references.
+ * it from scratch. test/deps.sql (run per test) only sets the psql
+ * variables the suite references; it does not install anything itself.
  * test/sql/schema.sql is the one exception: proving the schema-targeting
  * pipeline works is its actual job, so it explicitly drops this committed
  * install and recreates its own copies in schemas it chooses -- safely,
@@ -108,10 +108,9 @@ $DO$;
  *
  * extension_drop requires cat_tools. CASCADE auto-installs it on PG10+;
  * event triggers exist from 9.3 but CREATE EXTENSION ... CASCADE was only
- * added in PG10, so pre-PG10 needs cat_tools created explicitly first. This
- * mirrors the check test/deps.sql used to do per-test before this file took
- * over installing the extension. server_version_num is read once into a
- * psql variable rather than a runtime DO block, so it can drive \if
+ * added in PG10, so pre-PG10 needs cat_tools created explicitly first.
+ * server_version_num is read once into a psql variable rather than a
+ * runtime DO block, so it can drive \if
  * (client-side) branching around the VERSION-qualified CREATE EXTENSION
  * calls below without needing psql variables interpolated inside a
  * dollar-quoted DO body.
