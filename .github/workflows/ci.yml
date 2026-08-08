@@ -1,7 +1,86 @@
 name: CI
 on: [push, pull_request]
 jobs:
+  # Cheap gate that lets the PostgreSQL matrix below skip itself on
+  # pushes/PRs that touch only documentation. Files under .github/ are never
+  # doc-only even if their extension matches (they're workflow definitions
+  # with real behavioral weight).
+  #
+  # This does NOT affect claude-code-review.yml/claude.yml: those are
+  # separate workflows, unaffected by this job's outputs. We still want
+  # code review on doc changes (CLAUDE.md, README, etc) - this gate only
+  # skips the expensive Postgres test matrix.
+  resolve:
+    name: 🔍 Detect docs-only changes
+    runs-on: ubuntu-latest
+    outputs:
+      doc-only: ${{ steps.doc-only.outputs.doc-only }}
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+        with:
+          # Full history needed so BASE and HEAD below are both reachable
+          # for `git diff`.
+          fetch-depth: 0
+      - name: Check doc-only
+        id: doc-only
+        run: |
+          # Fail safe to running the full matrix: default doc-only to false
+          # immediately, so the only way this ends with doc-only=true is by
+          # genuinely proving it below - never by skipping past an edge case.
+          echo "doc-only=false" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ github.event_name }}" = "pull_request" ] && \
+             [ "${{ github.event.action }}" = "synchronize" ] && \
+             [ -n "${{ github.event.before }}" ]; then
+            # A push to an already-open PR: before/after give the true
+            # per-push diff, same as for a branch push.
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.event.after }}"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            # First run for this PR (opened/reopened/etc, or synchronize
+            # without a usable before): fall back to the whole base...head
+            # diff.
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.event.after }}"
+          fi
+
+          echo "base=$BASE"
+          echo "head=$HEAD"
+
+          # A missing HEAD, or an all-zeros BASE (e.g. a new branch's first
+          # push, where GitHub reports no prior commit), means we can't
+          # compute a real diff. doc-only is already false from above; just
+          # stop here rather than risk skipping tests.
+          if [ -z "$HEAD" ] || [ -z "$BASE" ] || [[ "$BASE" =~ ^0+$ ]]; then
+            exit 0
+          fi
+
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD" || echo __DIFF_FAILED__)
+
+          doc_only=true
+          if [ "$CHANGED" = "__DIFF_FAILED__" ] || [ -z "$CHANGED" ]; then
+            doc_only=false
+          else
+            while IFS= read -r f; do
+              case "$f" in
+                .github/*) doc_only=false; break ;;
+                *.md|*.asc|*.adoc|*.asciidoc) ;;
+                *) doc_only=false; break ;;
+              esac
+            done <<< "$CHANGED"
+          fi
+
+          echo "changed files:"
+          echo "$CHANGED"
+          echo "doc-only=$doc_only" >> "$GITHUB_OUTPUT"
+
   test:
+    needs: resolve
+    if: needs.resolve.outputs.doc-only != 'true'
     strategy:
       matrix:
         pg: [17, 16, 15, 14, 13, 12, 11, 10, 9.6, 9.5, 9.4, 9.3]
