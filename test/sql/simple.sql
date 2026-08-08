@@ -1,5 +1,4 @@
 \set ECHO none
-\set TEST_SCHEMA _test_ed
 \i test/pgxntool/setup.sql
 
 SELECT plan(
@@ -13,7 +12,6 @@ SELECT plan(
   + 1 -- Verify test table is empty
 
   + 1 -- Create test extension again
-  -- Change search path
   + 2 -- Test __remove and add
   + 1 -- Drop fails
   + 2 -- __remove and drop succeeds
@@ -47,18 +45,12 @@ SELECT lives_ok(
   , 'Create test extension again'
 );
 
-/*
- * Check search path for add command
- */
--- Intentionally change our search path
-SET search_path = "$user", public, tap;
-
 SELECT lives_ok(
-  $$SELECT _test_ed.extension_drop__remove('extension_drop_test')$$
+  $$SELECT extension_drop__remove('extension_drop_test')$$
   , 'Drop extension command'
 );
 SELECT lives_ok(
-  $$SELECT _test_ed.extension_drop__add('extension_drop_test', 'moo')$$
+  $$SELECT extension_drop__add('extension_drop_test', 'moo')$$
   , 'Add extension command'
 );
 
@@ -70,7 +62,7 @@ SELECT throws_ok(
 );
 
 SELECT lives_ok(
-  $$SELECT _test_ed.extension_drop__remove('extension_drop_test')$$
+  $$SELECT extension_drop__remove('extension_drop_test')$$
   , 'Drop extension command'
 );
 SELECT lives_ok(

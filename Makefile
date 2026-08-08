@@ -1,3 +1,62 @@
+# Run test/install/load.sql (extension install) COMMITTED, once, before the
+# main pgTAP suite, via pgxntool's test/install feature. Set explicitly
+# (rather than left to auto-detect) so an accidentally emptied test/install/
+# is a hard build error instead of silently falling back to "disabled".
+# Must be set before `include pgxntool/base.mk` below -- base.mk reads it
+# while parsing.
+PGXNTOOL_ENABLE_TEST_INSTALL = yes
+
+# TEST_LOAD_SOURCE selects how test/install/load.sql installs extension_drop:
+#   - fresh (default): CREATE EXTENSION extension_drop (current version).
+#   - update: CREATE EXTENSION at TEST_UPDATE_FROM, then ALTER EXTENSION
+#     UPDATE -- to TEST_UPDATE_TO if set, otherwise to the current version.
+#     Running the SAME suite/expected output against the result asserts
+#     update behaves identically to a fresh install. NOTE: extension_drop has
+#     never had a real second released version (PGXN's only listing is
+#     0.1.x from 2017, predating the current SQL entirely -- see HISTORY.asc
+#     and RELEASE.md), so TEST_UPDATE_FROM has no safe default; this mode is
+#     wired up and structurally ready, but there is nothing real to update
+#     FROM yet, and so no CI leg exercises it in this repo today.
+#   - existing: the extension is ALREADY installed (a real pg_upgrade, or an
+#     ALTER EXTENSION UPDATE done outside the suite). load.sql does not
+#     touch it; it only asserts presence + current version. Pair with
+#     CONTRIB_TESTDB=<db> and EXTRA_REGRESS_OPTS=--use-existing to point
+#     pg_regress at that database instead of a throwaway one.
+#
+# Propagated to load.sql as a GUC: pg_regress doesn't forward make variables,
+# but the psql processes it spawns inherit the environment, so PGOPTIONS
+# reaches load.sql. Exported UNCONDITIONALLY so load.sql can read it without
+# missing_ok and fail loudly if it didn't propagate, rather than silently
+# defaulting to the wrong mode. The mode is also validated here at
+# make-parse-time, so a typo like `TEST_LOAD_SOURCE=fresh ` or
+# `TEST_LOAD_SOURCE=typo` fails immediately instead of quietly running the
+# default.
+TEST_LOAD_SOURCE ?= fresh
+ifeq ($(filter $(TEST_LOAD_SOURCE),fresh update existing),)
+$(error TEST_LOAD_SOURCE must be 'fresh', 'update' or 'existing', got '$(TEST_LOAD_SOURCE)')
+endif
+
+# update-mode version range (load.sql only reads these in update mode).
+# Empty TEST_UPDATE_TO means "update to the current default_version". There
+# is no safe default for TEST_UPDATE_FROM (see above) -- require it
+# explicitly rather than pointing it at a version that doesn't exist.
+TEST_UPDATE_FROM ?=
+TEST_UPDATE_TO ?=
+ifeq ($(TEST_LOAD_SOURCE),update)
+  ifeq ($(strip $(TEST_UPDATE_FROM)),)
+$(error TEST_UPDATE_FROM must be set when TEST_LOAD_SOURCE=update -- extension_drop has no prior released version yet to default it to)
+  endif
+endif
+
+export PGOPTIONS := $(PGOPTIONS) -c extension_drop.test_load_mode=$(TEST_LOAD_SOURCE) -c extension_drop.test_update_from=$(TEST_UPDATE_FROM) -c extension_drop.test_update_to=$(TEST_UPDATE_TO)
+
+# make test-update == make test TEST_LOAD_SOURCE=update. Must recurse (a
+# fresh $(MAKE)) rather than depend on `test`, so the parse-time
+# TEST_LOAD_SOURCE conditional above re-evaluates with update set.
+.PHONY: test-update
+test-update:
+	$(MAKE) test TEST_LOAD_SOURCE=update
+
 include pgxntool/base.mk
 
 # Explicit rather than relying on auto-detect (which enables this whenever

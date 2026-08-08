@@ -1,0 +1,14 @@
+# pg_regress writes the install step's result here, because the install
+# schedule references tests as ../install/<name> -- one directory up from
+# both test/expected/ and test/results/, which cancels back out to this same
+# directory for both. So load.out is simultaneously "expected" and "actual":
+# confirmed by hand (deliberately breaking load.sql's existing-mode assertion
+# and seeing pg_regress still report the step "ok" while the real error text
+# showed up in this file) that pg_regress can never see a diff for it here,
+# regardless of what load.sql actually does. Never track it -- it would just
+# be reformatted/overwritten noise on every run, not a real expectation.
+load.out
+# Precautionary: haven't observed pg_regress emit a *.diff for this
+# self-comparing path locally, but if it ever does, it'd be equally
+# meaningless to track for the same reason as load.out above.
+install.out.diff
