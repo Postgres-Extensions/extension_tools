@@ -10,11 +10,6 @@
  * into every (rolled-back) test/sql/ file instead of each one re-installing
  * it from scratch. test/deps.sql (run per test) only sets the psql
  * variables the suite references; it does not install anything itself.
- * test/sql/schema.sql is the one exception: proving the schema-targeting
- * pipeline works is its actual job, so it explicitly drops this committed
- * install and recreates its own copies in schemas it chooses -- safely,
- * since that all happens inside its own rolled-back transaction and never
- * escapes that one file.
  *
  * Three modes, selected by the extension_drop.test_load_mode placeholder
  * GUC, which the Makefile's TEST_LOAD_SOURCE block sets via PGOPTIONS
@@ -164,23 +159,37 @@ CREATE SCHEMA :"extension_drop_test_schema";
 /*
  * CASCADE auto-installs cat_tools on PG10+; pre-PG10 needs it created
  * explicitly first instead (CREATE EXTENSION ... CASCADE was only added in
- * PG10, though event triggers themselves exist from 9.3). Doing the
- * pg10_plus branching ONCE here, building a single reusable CASCADE-clause
- * suffix, avoids duplicating the entire CREATE EXTENSION statement (schema
- * + version + cascade) once per fresh/update branch below.
+ * PG10, though event triggers themselves exist from 9.3).
  */
 \if :extension_drop_pg10_plus
 \else
 CREATE EXTENSION IF NOT EXISTS cat_tools;
 \endif
 
-SELECT CASE WHEN :'extension_drop_pg10_plus' THEN ' CASCADE' ELSE '' END AS extension_drop_cascade_clause
-\gset
-
--- update mode: install at the OLD version, then ALTER EXTENSION UPDATE below.
-\if :extension_drop_mode_update
+-- Read unconditionally; empty and unused outside update mode.
 SELECT current_setting('extension_drop.test_update_from') AS extension_drop_test_update_from \gset
 SELECT current_setting('extension_drop.test_update_to')   AS extension_drop_test_update_to   \gset
+
+/*
+ * One combined suffix covers every fresh/update x pre/post-PG10
+ * combination -- SCHEMA is always present, VERSION only in update mode,
+ * CASCADE only on PG10+ -- so a SINGLE CREATE EXTENSION statement below
+ * handles all four cases instead of duplicating it once per combination.
+ */
+SELECT
+    format(' SCHEMA %I', :'extension_drop_test_schema')
+    || CASE WHEN :'extension_drop_mode_update'::boolean
+              THEN format(' VERSION %L', :'extension_drop_test_update_from')
+              ELSE ''
+       END
+    || CASE WHEN :'extension_drop_pg10_plus'::boolean THEN ' CASCADE' ELSE '' END
+  AS extension_drop_create_suffix
+\gset
+
+CREATE EXTENSION extension_drop:extension_drop_create_suffix;
+
+-- update mode only: bring the just-installed old version up to date.
+\if :extension_drop_mode_update
 /*
  * Build the optional target clause once so a SINGLE ALTER EXTENSION covers
  * both cases: an empty test_update_to yields '' (update to the current
@@ -191,18 +200,13 @@ SELECT CASE WHEN :'extension_drop_test_update_to' = '' THEN ''
             ELSE format('TO %L', :'extension_drop_test_update_to') END
   AS extension_drop_update_to_clause \gset
 
-CREATE EXTENSION extension_drop SCHEMA :"extension_drop_test_schema" VERSION :'extension_drop_test_update_from':extension_drop_cascade_clause;
-
 /*
  * Suppress the deprecation NOTICEs an update script might emit.
  */
 SET client_min_messages = ERROR;
 ALTER EXTENSION extension_drop UPDATE :extension_drop_update_to_clause;
 SET client_min_messages = WARNING;
--- fresh mode: plain CREATE EXTENSION at the current version.
-\else
-CREATE EXTENSION extension_drop SCHEMA :"extension_drop_test_schema":extension_drop_cascade_clause;
--- end \if :extension_drop_mode_update (fresh vs. update install branch)
+-- end \if :extension_drop_mode_update (update-mode-only ALTER EXTENSION UPDATE)
 \endif
 -- end \if :extension_drop_mode_existing (existing mode skips the whole (re)install block)
 \endif

@@ -8,20 +8,13 @@
  * calling test/pgxntool/finish.sql (the vendored default) directly. This
  * file does the check, then delegates to the real one.
  *
- * Discovers extension_drop's schema fresh, the same way test/deps.sql does,
- * rather than trusting a psql variable that might be stale by now --
- * test/sql/schema.sql deliberately drops/recreates extension_drop in
- * schemas of its own choosing, so "wherever it actually is at this exact
- * moment" is the only thing that matters for this check.
+ * Reuses :'extension_drop_schema' (set once by test/deps.sql) rather than
+ * rediscovering it -- no test file moves extension_drop to a different
+ * schema mid-run, so the value set at the top of the session is still
+ * accurate here.
  */
-SELECT n.nspname AS extension_drop_finish_schema
-FROM pg_namespace n
-JOIN pg_extension x ON n.oid = x.extnamespace
-WHERE x.extname = 'extension_drop'
-\gset
-
 SELECT is(
-  current_schemas(true) @> array[:'extension_drop_finish_schema'::name]
+  current_schemas(true) @> array[:'extension_drop_schema'::name]
   , false
   , 'extension_drop''s schema should not be reachable via search_path'
 );

@@ -20,10 +20,19 @@ same schema-independence property. It's genuinely schema-flexible. See
 methodology (why `schema=` and not `relocatable=` is what matters, and how
 to actually prove search_path-independence).
 
-This is best implemented as a `TEST_SCHEMA` switch on the *whole* test
-suite (mirroring `TEST_LOAD_SOURCE`'s existing GUC-propagation mechanism
-through `test/install/load.sql` / `test/deps.sql`), not confined to a single
-dedicated test file — a dedicated file only proves the property for whatever
-it happens to exercise, not for the rest of the suite.
-`Postgres-Extensions/pg_count_nulls` PR #28 ("TEST_SCHEMA switching in
-test/install") is a working reference implementation of this exact pattern.
+`test/install/load.sql` implements this by installing into a freshly
+created, randomly named schema (a constant, quote-forcing prefix plus a
+random suffix) on every single fresh/update-mode run — not a configurable
+switch confined to one leg or one dedicated test file, since a single
+dedicated file only proves the property for whatever it happens to
+exercise, not for the rest of the suite. `test/deps.sql` rediscovers that
+schema per test-file session (it never adds it to `search_path`, and
+never assumes a naming convention beyond what it queries from
+`pg_extension`/`pg_namespace` directly); `test/finish.sql` asserts at the
+end of every test file that the schema was never reachable via
+`search_path` regardless.
+
+`https://github.com/Postgres-Extensions/pg_count_nulls/pull/55` is the
+reference this was adapted from (not ported wholesale — see that PR, and
+`test/install/load.sql`'s own header comment, for the structural
+differences that don't transfer between the two extensions).
