@@ -41,12 +41,23 @@
  *
  * Unlike cat_tools (whose control file pins schema = 'cat_tools' --
  * CREATE EXTENSION always lands in the same place, no choice), extension_drop's
- * control file has no schema= line, so CREATE EXTENSION here lands wherever
- * the ambient search_path resolves when this file runs -- a fresh psql
- * session's default "$user", public, i.e. public in practice. That's a
- * deliberate, useful default: it proves nothing in extension_drop's install
- * script is hardcoded to a specific schema, the same property
- * test/sql/schema.sql proves again explicitly for non-default schemas.
+ * control file has no schema= line, so it is genuinely install-schema-
+ * flexible -- nothing in its own SQL may assume where it landed. fresh/update
+ * mode exploits that on every single run below: each install targets a
+ * freshly created schema with a randomly generated name (never public,
+ * never the same name twice in a row), so a hardcoded-schema bug in
+ * extension_drop's own SQL fails immediately and unconditionally, instead of
+ * only on the rare install that happens to land outside the default
+ * search_path. The random schema is targeted directly via CREATE EXTENSION
+ * ... SCHEMA, never by first mutating search_path -- that would let an
+ * install succeed via a coincidentally arranged search_path and mask
+ * exactly the kind of qualification bug this exists to catch. existing mode
+ * (below) does not create anything -- it only asserts against whatever a
+ * real pg_upgrade already produced, wherever that happened to land.
+ * test/sql/schema.sql separately proves the stricter "still works even with
+ * the schema explicitly EXCLUDED from search_path" property; this file's
+ * random schema is instead added TO search_path for the rest of the suite's
+ * convenience (see test/deps.sql), not excluded from it.
  */
 SET client_min_messages = WARNING;
 
@@ -120,6 +131,36 @@ DROP EXTENSION IF EXISTS extension_drop CASCADE;
 SELECT current_setting('server_version_num')::int >= 100000 AS extension_drop_pg10_plus
 \gset
 
+/*
+ * Fresh/update installs always target a fresh, randomly named schema --
+ * never public, never reused -- so nothing below can coast on landing in a
+ * predictable place. The constant prefix (including its trailing space)
+ * already forces identifier quoting on its own, before the random suffix
+ * is even appended -- unlike a mixed-case-only name, which would only force
+ * quoting by coincidence of which characters the randomness happened to
+ * produce.
+ *
+ * Cleanup-before-create: a prior run that crashed before reaching its own
+ * teardown would otherwise leave its randomly-named schema behind forever,
+ * since nothing else knows that name to find and drop it later. Matching on
+ * the constant prefix finds and drops any such leftovers before generating
+ * this run's own name.
+ */
+DO $DO$
+DECLARE
+  r record;
+BEGIN
+  FOR r IN SELECT nspname FROM pg_namespace WHERE nspname LIKE 'extension_drop test schema %' LOOP
+    EXECUTE format('DROP SCHEMA %I CASCADE', r.nspname);
+  END LOOP;
+END
+$DO$;
+
+SELECT 'extension_drop test schema ' || substr(md5(random()::text), 1, 12) AS extension_drop_test_schema
+\gset
+
+CREATE SCHEMA :"extension_drop_test_schema";
+
 -- update mode: install at the OLD version, then ALTER EXTENSION UPDATE below.
 \if :extension_drop_mode_update
 SELECT current_setting('extension_drop.test_update_from') AS extension_drop_test_update_from \gset
@@ -135,10 +176,10 @@ SELECT CASE WHEN :'extension_drop_test_update_to' = '' THEN ''
   AS extension_drop_update_to_clause \gset
 
 \if :extension_drop_pg10_plus
-CREATE EXTENSION extension_drop VERSION :'extension_drop_test_update_from' CASCADE;
+CREATE EXTENSION extension_drop SCHEMA :"extension_drop_test_schema" VERSION :'extension_drop_test_update_from' CASCADE;
 \else
 CREATE EXTENSION IF NOT EXISTS cat_tools;
-CREATE EXTENSION extension_drop VERSION :'extension_drop_test_update_from';
+CREATE EXTENSION extension_drop SCHEMA :"extension_drop_test_schema" VERSION :'extension_drop_test_update_from';
 \endif
 
 /*
@@ -150,10 +191,10 @@ SET client_min_messages = WARNING;
 -- fresh mode: plain CREATE EXTENSION at the current version.
 \else
 \if :extension_drop_pg10_plus
-CREATE EXTENSION extension_drop CASCADE;
+CREATE EXTENSION extension_drop SCHEMA :"extension_drop_test_schema" CASCADE;
 \else
 CREATE EXTENSION IF NOT EXISTS cat_tools;
-CREATE EXTENSION extension_drop;
+CREATE EXTENSION extension_drop SCHEMA :"extension_drop_test_schema";
 \endif
 -- end \if :extension_drop_mode_update (fresh vs. update install branch)
 \endif
