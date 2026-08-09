@@ -1,9 +1,32 @@
 name: CI
-# Scope push to master only. With a bare `on: [push, pull_request]`, a commit to
-# a branch that has an open PR triggers CI twice (once for push, once for
-# pull_request) for the same SHA -- wasteful, and a flaky run can show red next
-# to an identical green one. PR branches now run only via pull_request; master
-# (post-merge) runs via push.
+# Test strategy
+#
+# `test` -- fresh install (`pg-build-test`) across every PostgreSQL major
+# extension_drop's own SQL claims to support (see META.json).
+#
+# `pg-upgrade-test` -- binary pg_upgrade legs: install the CURRENT
+# extension_drop version on an OLD cluster, plant a dependency guard, binary
+# pg_upgrade straight to a NEWER major, then run the suite in existing mode
+# against the real migrated objects (see bin/test_existing). No update step
+# and no bridge leg: extension_drop has only ever shipped one real version
+# (1.0.0 -- see HISTORY.asc/RELEASE.md; the only PGXN listing, 0.1.x from
+# 2017, predates the current SQL entirely), so extversion never changes
+# across a leg and there is no known pg_upgrade-unsafe old version to bridge
+# from (see ~/advanced-extension-testing.md §6c's own guidance not to build
+# that preemptively). Legs' old_pg floor is 12, NOT extension_drop's own
+# claimed 9.3 floor above: this workflow's CAT_TOOLS_GIT_REF (see below)
+# makes `make install` build cat_tools from the `0.3.0` git tag instead of
+# PGXN (see the Makefile's `cat_tools` target comment -- PGXN's published
+# cat_tools is a stale 2017 release extension_drop can't use), and that
+# current cat_tools requires PostgreSQL >= 12 for a fresh install (its own META.json,
+# build.requires.PostgreSQL). Below PG12, `make install` cannot complete at
+# all today, independent of anything this job does -- consistent with the
+# already-known pre-existing old-PG failures on the plain `test` job (see
+# this branch's own history: "Revert ci.yml pg-build-test switch:
+# pre-existing failures on old PG predate this branch").
+#
+# Scope: push only runs on master (post-merge); PR commits are covered by
+# pull_request -- avoids double-running CI for the same commit.
 on:
   push:
     branches: [master]
@@ -18,6 +41,11 @@ on:
 # RELEASE.md's guardrail against cutting a release while this is still set.
 env:
   CAT_TOOLS_GIT_REF: 0.3.0
+concurrency:
+  # A superseded push's pg_upgrade matrix (several binary pg_upgrades) is
+  # pure waste once a newer push on the same ref supersedes it.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   # Style linter (https://github.com/Postgres-Extensions/linter, vendored at
   # .vendor/linter). Deliberately checked out WITHOUT submodules -- `make
@@ -36,6 +64,82 @@ jobs:
         uses: actions/checkout@v5
       - name: Lint SQL
         run: make lint
+
+  # Cheap gate that lets the heavy pg-upgrade-test job below skip itself on
+  # commits that touch only docs. Must run on every push/pull_request (no
+  # paths-ignore on the workflow itself) -- otherwise the required
+  # all-checks-passed check would never report on a docs-only push and get
+  # stuck Pending in branch protection (~/advanced-extension-testing.md §6f).
+  # Deliberately NOT gating the pre-existing `test` job on this: `test` is
+  # already cheap (a single `pg-build-test` per PG major), so there is
+  # nothing costly to save by skipping it too -- only pg-upgrade-test (several
+  # real binary pg_upgrades per push) is worth gating.
+  changes:
+    name: 🔍 Detect docs-only changes
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.diff.outputs.docs_only }}
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v5
+        with:
+          # Full history so BASE and HEAD are both reachable for `git diff`.
+          fetch-depth: 0
+      - name: Compute per-push changed files
+        id: diff
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ] && \
+             [ "${{ github.event.action }}" = "synchronize" ] && \
+             [ -n "${{ github.event.before }}" ]; then
+            # A push to an already-open PR: before/after give the true
+            # per-push diff, same as for a branch push.
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.event.after }}"
+          elif [ "${{ github.event_name }}" = "pull_request" ]; then
+            # First run for this PR (opened/reopened/etc, or synchronize
+            # without a usable before): fall back to the whole base...head
+            # diff.
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          else
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.event.after }}"
+          fi
+
+          echo "base=$BASE"
+          echo "head=$HEAD"
+
+          # Fail-safe is the literal FIRST thing written to GITHUB_OUTPUT, so
+          # any early exit or error further down (a bad BASE/HEAD, a failed
+          # git diff) leaves docs_only=false in place rather than silently
+          # falling through to "skip the heavy job".
+          echo "docs_only=false" >> "$GITHUB_OUTPUT"
+
+          # A missing HEAD/BASE, or an all-zeros BASE (e.g. a new branch's
+          # first push, where GitHub reports no prior commit), means we
+          # can't compute a real diff -- run the full matrix rather than
+          # risk skipping tests.
+          if [ -z "$HEAD" ] || [ -z "$BASE" ] || [[ "$BASE" =~ ^0+$ ]]; then
+            exit 0
+          fi
+
+          CHANGED=$(git diff --name-only "$BASE" "$HEAD" || echo __DIFF_FAILED__)
+
+          if [ "$CHANGED" = "__DIFF_FAILED__" ] || [ -z "$CHANGED" ]; then
+            exit 0
+          fi
+
+          DOCS_ONLY=true
+          while IFS= read -r f; do
+            if ! [[ "$f" =~ \.(md|asc)$ ]]; then
+              DOCS_ONLY=false
+              break
+            fi
+          done <<< "$CHANGED"
+
+          echo "changed files:"
+          echo "$CHANGED"
+          echo "docs_only=$DOCS_ONLY" >> "$GITHUB_OUTPUT"
 
   test:
     # Gated behind lint: the 12-leg PG matrix below is comparatively
@@ -62,13 +166,86 @@ jobs:
       - name: Test on PostgreSQL ${{ matrix.pg }}
         run: pg-build-test
 
+  # Proves extension_drop survives a BINARY pg_upgrade (in-place catalog
+  # migration to a newer PostgreSQL major), not just a fresh install. Each
+  # leg: install the CURRENT extension_drop version on an OLD cluster, plant
+  # + prove a dependency guard, binary pg_upgrade STRAIGHT to a NEWER major,
+  # then run the suite against the REAL migrated objects in "existing" mode
+  # (bin/test_existing). No update-to-current step: extension_drop has only
+  # ever shipped one real version, so extversion is already current on both
+  # sides of every leg (see bin/test_existing's own header comment for the
+  # full reasoning, including why it has no bridge/update-scenario machinery
+  # unlike its cat_tools model).
+  #
+  # Modest matrix: two adjacent-major legs (one near the floor, one near the
+  # ceiling) plus one full-span leg (floor -> newest). The floor is 12, not
+  # extension_drop's own claimed 9.3 -- see the top-of-file comment.
+  pg-upgrade-test:
+    # Gated behind the cheap jobs: this matrix is expensive (multiple binary
+    # pg_upgrades), and every leg would fail anyway on a baseline already
+    # broken by a failing fresh-install test. success() is required
+    # explicitly once a job's `if:` references anything -- GitHub only
+    # assumes success() as a default when no `if:` is written at all.
+    needs: [changes, test]
+    if: success() && needs.changes.outputs.docs_only != 'true'
+    strategy:
+      matrix:
+        include:
+          - old_pg: "12"
+            new_pg: "13"
+          - old_pg: "16"
+            new_pg: "17"
+          - old_pg: "12"
+            new_pg: "17"
+    name: 🔄 Binary pg_upgrade ${{ matrix.old_pg }} → ${{ matrix.new_pg }}
+    runs-on: ubuntu-latest
+    container: pgxn/pgxn-tools
+    env:
+      # Both clusters must use the same initdb options so pg_upgrade sees
+      # consistent settings (checksums, auth) on old and new clusters.
+      INITDB_OPTS: --data-checksums --auth trust
+    steps:
+      - name: Start PostgreSQL ${{ matrix.old_pg }}
+        run: pg-start ${{ matrix.old_pg }}
+      - name: Check out the repo
+        uses: actions/checkout@v5
+      - name: Install rsync
+        run: apt-get install -y rsync
+      - name: Recreate old cluster with data checksums enabled
+        run: .github/scripts/pg_upgrade_cluster recreate-old ${{ matrix.old_pg }}
+      - name: Install extension_drop (+ cat_tools) into old cluster
+        run: make install
+      - name: Prepare the old cluster (install + dependency guard)
+        # prepare creates the database, installs extension_drop CASCADE
+        # (auto-installing cat_tools) at the current version, then plants +
+        # proves the dependency guard so the later existing-mode run cannot
+        # silently drop+reinstall and test a fresh install instead.
+        run: bin/test_existing prepare extension_drop_upgrade
+      - name: Install PostgreSQL ${{ matrix.new_pg }}
+        run: apt-get install -y postgresql-${{ matrix.new_pg }}
+      - name: Install extension_drop (+ cat_tools) into new cluster
+        # PG_CONFIG must be specified explicitly: at this point both old and
+        # new PostgreSQL are installed, and the default pg_config on PATH may
+        # not be the new version's.
+        run: make install PG_CONFIG=/usr/lib/postgresql/${{ matrix.new_pg }}/bin/pg_config
+      - name: Stop old cluster, binary pg_upgrade to PostgreSQL ${{ matrix.new_pg }}, start new cluster
+        run: .github/scripts/pg_upgrade_cluster upgrade ${{ matrix.old_pg }} ${{ matrix.new_pg }}
+      - name: Run the suite against the pg_upgraded database (existing mode)
+        # run-suite asserts the version, re-proves the dependency guard
+        # still blocks a non-CASCADE drop (i.e. it survived pg_upgrade), then
+        # runs the existing-mode-curated suite (see bin/test_existing) against
+        # the REAL pg_upgraded database via --use-existing -- a plain fresh
+        # `make test` would silently test a fresh install instead of the
+        # migrated objects.
+        run: bin/test_existing run-suite extension_drop_upgrade
+
   # A single stable check name for use as a required status check in branch
   # protection. Matrix jobs produce names like "🐘 PostgreSQL 14" that change
   # with the matrix; this aggregates them into one. It passes if every needed
-  # job succeeded or was skipped (e.g. a docs-only push with paths-ignore) and
-  # fails if any failed or were cancelled.
+  # job succeeded or was skipped (e.g. a docs-only push skipping
+  # pg-upgrade-test) and fails if any failed or were cancelled.
   all-checks-passed:
-    needs: [lint, test]
+    needs: [lint, changes, test, pg-upgrade-test]
     if: always()
     runs-on: ubuntu-latest
     steps:
