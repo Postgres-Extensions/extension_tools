@@ -19,18 +19,20 @@
  * This also handles existing mode "for free": whatever schema a real
  * pg_upgrade actually used is found the same way, no special-casing needed.
  *
- * Added TO search_path (not excluded) so the rest of the suite's existing
- * unqualified calls into extension_drop keep working unchanged.
- * test/sql/schema.sql is the one place that deliberately excludes a schema
- * from search_path, to prove qualified calls work even then.
+ * Deliberately NOT added to search_path: doing so would make any
+ * accidentally-unqualified self-reference inside extension_drop's own
+ * functions resolve correctly too, masking exactly the class of bug this
+ * whole random-schema scheme exists to catch. Every test file that calls
+ * into extension_drop's own functions qualifies those calls explicitly
+ * using :'extension_drop_schema' instead (test/sql/simple.sql,
+ * test/sql/dependency_guard.sql) -- test/finish.sql asserts at the end of
+ * every file that the schema never ended up on search_path regardless.
  */
 SELECT n.nspname AS extension_drop_schema
 FROM pg_namespace n
 JOIN pg_extension x ON n.oid = x.extnamespace
 WHERE x.extname = 'extension_drop'
 \gset
-
-SET search_path = :"extension_drop_schema", "$user", public, tap;
 
 \set TT extension_drop_test_table
 CREATE TEMP TABLE :TT (i int);

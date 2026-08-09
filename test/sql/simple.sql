@@ -15,6 +15,8 @@ SELECT plan(
   + 2 -- Test __remove and add
   + 1 -- Drop fails
   + 2 -- __remove and drop succeeds
+
+  + 1 -- extension_drop's schema should not be on search_path (test/finish.sql)
 );
 
 \i test/helpers/test_ext__insert.sql
@@ -25,7 +27,7 @@ SELECT lives_ok(
 );
 
 SELECT bag_eq(
-  $$SELECT * FROM extension_drop__get('extension_drop_test')$$
+  format($$SELECT * FROM %I.extension_drop__get('extension_drop_test')$$, :'extension_drop_schema')
   , $$SELECT 'extension_drop_test'::name, 'DELETE FROM extension_drop_test_table'::text$$
   , 'Verify extension_drop__get()'
 );
@@ -46,11 +48,11 @@ SELECT lives_ok(
 );
 
 SELECT lives_ok(
-  $$SELECT extension_drop__remove('extension_drop_test')$$
+  format($$SELECT %I.extension_drop__remove('extension_drop_test')$$, :'extension_drop_schema')
   , 'Drop extension command'
 );
 SELECT lives_ok(
-  $$SELECT extension_drop__add('extension_drop_test', 'moo')$$
+  format($$SELECT %I.extension_drop__add('extension_drop_test', 'moo')$$, :'extension_drop_schema')
   , 'Add extension command'
 );
 
@@ -62,7 +64,7 @@ SELECT throws_ok(
 );
 
 SELECT lives_ok(
-  $$SELECT extension_drop__remove('extension_drop_test')$$
+  format($$SELECT %I.extension_drop__remove('extension_drop_test')$$, :'extension_drop_schema')
   , 'Drop extension command'
 );
 SELECT lives_ok(
@@ -70,6 +72,6 @@ SELECT lives_ok(
   , 'Drop test extension'
 );
 
-\i test/pgxntool/finish.sql
+\i test/finish.sql
 
 -- vi: expandtab sw=2 ts=2

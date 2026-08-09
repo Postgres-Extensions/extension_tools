@@ -54,10 +54,10 @@
  * exactly the kind of qualification bug this exists to catch. existing mode
  * (below) does not create anything -- it only asserts against whatever a
  * real pg_upgrade already produced, wherever that happened to land.
- * test/sql/schema.sql separately proves the stricter "still works even with
- * the schema explicitly EXCLUDED from search_path" property; this file's
- * random schema is instead added TO search_path for the rest of the suite's
- * convenience (see test/deps.sql), not excluded from it.
+ * The random schema is deliberately never added to search_path either --
+ * see test/deps.sql, which rediscovers it fresh instead of trusting a
+ * search_path shortcut, and test/finish.sql, which asserts at the end of
+ * every test file that it never ended up on search_path regardless.
  */
 SET client_min_messages = WARNING;
 
@@ -161,6 +161,22 @@ SELECT 'extension_drop test schema ' || substr(md5(random()::text), 1, 12) AS ex
 
 CREATE SCHEMA :"extension_drop_test_schema";
 
+/*
+ * CASCADE auto-installs cat_tools on PG10+; pre-PG10 needs it created
+ * explicitly first instead (CREATE EXTENSION ... CASCADE was only added in
+ * PG10, though event triggers themselves exist from 9.3). Doing the
+ * pg10_plus branching ONCE here, building a single reusable CASCADE-clause
+ * suffix, avoids duplicating the entire CREATE EXTENSION statement (schema
+ * + version + cascade) once per fresh/update branch below.
+ */
+\if :extension_drop_pg10_plus
+\else
+CREATE EXTENSION IF NOT EXISTS cat_tools;
+\endif
+
+SELECT CASE WHEN :'extension_drop_pg10_plus' THEN ' CASCADE' ELSE '' END AS extension_drop_cascade_clause
+\gset
+
 -- update mode: install at the OLD version, then ALTER EXTENSION UPDATE below.
 \if :extension_drop_mode_update
 SELECT current_setting('extension_drop.test_update_from') AS extension_drop_test_update_from \gset
@@ -175,12 +191,7 @@ SELECT CASE WHEN :'extension_drop_test_update_to' = '' THEN ''
             ELSE format('TO %L', :'extension_drop_test_update_to') END
   AS extension_drop_update_to_clause \gset
 
-\if :extension_drop_pg10_plus
-CREATE EXTENSION extension_drop SCHEMA :"extension_drop_test_schema" VERSION :'extension_drop_test_update_from' CASCADE;
-\else
-CREATE EXTENSION IF NOT EXISTS cat_tools;
-CREATE EXTENSION extension_drop SCHEMA :"extension_drop_test_schema" VERSION :'extension_drop_test_update_from';
-\endif
+CREATE EXTENSION extension_drop SCHEMA :"extension_drop_test_schema" VERSION :'extension_drop_test_update_from':extension_drop_cascade_clause;
 
 /*
  * Suppress the deprecation NOTICEs an update script might emit.
@@ -190,12 +201,7 @@ ALTER EXTENSION extension_drop UPDATE :extension_drop_update_to_clause;
 SET client_min_messages = WARNING;
 -- fresh mode: plain CREATE EXTENSION at the current version.
 \else
-\if :extension_drop_pg10_plus
-CREATE EXTENSION extension_drop SCHEMA :"extension_drop_test_schema" CASCADE;
-\else
-CREATE EXTENSION IF NOT EXISTS cat_tools;
-CREATE EXTENSION extension_drop SCHEMA :"extension_drop_test_schema";
-\endif
+CREATE EXTENSION extension_drop SCHEMA :"extension_drop_test_schema":extension_drop_cascade_clause;
 -- end \if :extension_drop_mode_update (fresh vs. update install branch)
 \endif
 -- end \if :extension_drop_mode_existing (existing mode skips the whole (re)install block)

@@ -1,5 +1,5 @@
 \set ECHO none
-1..11
+1..12
 ok 1 - Insert into extension_drop_test_table
 ok 2 - Create test extension
 ok 3 - Verify extension_drop__get()
@@ -11,4 +11,5 @@ ok 8 - Add extension command
 ok 9 - Dropping extension with bad command should fail
 ok 10 - Drop extension command
 ok 11 - Drop test extension
+ok 12 - extension_drop's schema should not be reachable via search_path
 # TRANSACTION INTENTIONALLY LEFT OPEN!

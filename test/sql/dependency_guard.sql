@@ -29,16 +29,27 @@
  * afterward. Everything here runs inside pgTAP's own rolled-back
  * transaction, so the guard schema/view never leaks into any other test
  * file.
+ *
+ * extension_drop__commands is qualified via :'extension_drop_schema'
+ * (test/deps.sql) rather than referenced bare -- extension_drop's schema
+ * is deliberately NOT on search_path (see test/deps.sql's header), so an
+ * unqualified reference here would just fail to find the type, not
+ * silently succeed.
  */
 CREATE SCHEMA extension_drop_drop_guard;
-CREATE VIEW extension_drop_drop_guard.guard AS
-  SELECT NULL::extension_drop__commands AS guarded_member;
+SELECT format(
+  'CREATE VIEW extension_drop_drop_guard.guard AS SELECT NULL::%I.extension_drop__commands AS guarded_member'
+  , :'extension_drop_schema'
+)
+\gexec
 
 SELECT plan(
   0
   + 1 -- non-CASCADE drop is blocked
   + 1 -- extension_drop is still installed
   + 1 -- guard view still present
+
+  + 1 -- extension_drop's schema should not be on search_path (test/finish.sql)
 );
 
 /*
@@ -61,6 +72,6 @@ SELECT has_extension('extension_drop', 'extension_drop is still installed after 
 
 SELECT has_view('extension_drop_drop_guard', 'guard', 'Dependency guard view is still present after the blocked drop attempt');
 
-\i test/pgxntool/finish.sql
+\i test/finish.sql
 
 -- vi: expandtab ts=2 sw=2

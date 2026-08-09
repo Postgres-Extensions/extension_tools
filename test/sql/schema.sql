@@ -5,15 +5,14 @@
 /*
  * extension_drop is already installed (test/install/load.sql, committed,
  * landing in a freshly created, randomly generated schema -- never public --
- * every run) before this suite runs. This file's actual job is proving the
- * stricter "still works even with the schema explicitly EXCLUDED from
- * search_path" property (load.sql's own random schema is instead added TO
- * search_path, for the rest of the suite's convenience -- see
- * test/deps.sql), so it drops that committed install and recreates its own
- * copies in schemas it chooses instead. Safe to drop here: this whole file
- * runs inside pgTAP's own rolled-back transaction, so load.sql's committed
- * install is back in place for the next test file regardless of what
- * happens below.
+ * every run, deliberately never added to search_path -- see test/deps.sql)
+ * before this suite runs. This file's actual job is proving the SAME
+ * off-search_path property explicitly, for a schema it controls end to
+ * end, plus the schema-targeting/quoting pipeline itself -- so it drops
+ * that committed install and recreates its own copies in schemas it
+ * chooses instead. Safe to drop here: this whole file runs inside pgTAP's
+ * own rolled-back transaction, so load.sql's committed install is back in
+ * place for the next test file regardless of what happens below.
  *
  * :TEST_SCHEMA and :TEST_SCHEMA_2 are mixed-case, so every reference to
  * them MUST be identifier-quoted (:"TEST_SCHEMA", or %I via format()) --
@@ -43,6 +42,8 @@ SELECT plan(
   + 2 -- update/verify
 
   + 1 -- drop old test schema
+
+  + 1 -- extension_drop's schema should not be on search_path (test/finish.sql)
 );
 
 \i test/helpers/test_ext__create_drop.sql
@@ -83,6 +84,6 @@ SELECT lives_ok(
   , 'Drop schema ' || :'TEST_SCHEMA' || ' without cascade succeeds'
 );
 
-\i test/pgxntool/finish.sql
+\i test/finish.sql
 
 -- vi: expandtab sw=2 ts=2
