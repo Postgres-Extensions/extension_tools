@@ -1,0 +1,7 @@
+\set ECHO none
+1..4
+ok 1 - Non-CASCADE DROP EXTENSION extension_drop is blocked by the dependency guard
+ok 2 - extension_drop is still installed after the blocked drop attempt
+ok 3 - Dependency guard view is still present after the blocked drop attempt
+ok 4 # SKIP existing mode: extension_drop's placement is outside this suite's control
+# TRANSACTION INTENTIONALLY LEFT OPEN!

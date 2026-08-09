@@ -1,0 +1,15 @@
+\set ECHO none
+1..12
+ok 1 - Insert into extension_drop_test_table
+ok 2 - Create test extension
+ok 3 - Verify extension_drop__get()
+ok 4 - Drop test extension
+ok 5 - extension_drop_test_table is empty
+ok 6 - Create test extension again
+ok 7 - Drop extension command
+ok 8 - Add extension command
+ok 9 - Dropping extension with bad command should fail
+ok 10 - Drop extension command
+ok 11 - Drop test extension
+ok 12 # SKIP existing mode: extension_drop's placement is outside this suite's control
+# TRANSACTION INTENTIONALLY LEFT OPEN!
