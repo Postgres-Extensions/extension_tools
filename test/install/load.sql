@@ -150,9 +150,7 @@ DO $DO$
 DECLARE
   r record;
 BEGIN
-  FOR r IN SELECT nspname FROM pg_namespace
-             WHERE left(nspname, length('extension_drop test schema ')) = 'extension_drop test schema '
-  LOOP
+  FOR r IN SELECT nspname FROM pg_namespace WHERE nspname ~ '^extension_drop test schema ' LOOP
     EXECUTE format('DROP SCHEMA %I CASCADE', r.nspname);
   END LOOP;
 END
