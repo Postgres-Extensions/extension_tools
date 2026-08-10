@@ -8,22 +8,8 @@ name: CI
 # extension_drop version on an OLD cluster, plant a dependency guard, binary
 # pg_upgrade straight to a NEWER major, then run the suite in existing mode
 # against the real migrated objects (see bin/test_existing). No update step
-# and no bridge leg: extension_drop has only ever shipped one real version
-# (1.0.0 -- see HISTORY.asc/RELEASE.md; the only PGXN listing, 0.1.x from
-# 2017, predates the current SQL entirely), so extversion never changes
-# across a leg and there is no known pg_upgrade-unsafe old version to bridge
-# from (see ~/advanced-extension-testing.md §6c's own guidance not to build
-# that preemptively). Legs' old_pg floor is 12, NOT extension_drop's own
-# claimed 9.3 floor above: this workflow's CAT_TOOLS_GIT_REF (see below)
-# makes `make install` build cat_tools from the `0.3.0` git tag instead of
-# PGXN (see the Makefile's `cat_tools` target comment -- PGXN's published
-# cat_tools is a stale 2017 release extension_drop can't use), and that
-# current cat_tools requires PostgreSQL >= 12 for a fresh install (its own META.json,
-# build.requires.PostgreSQL). Below PG12, `make install` cannot complete at
-# all today, independent of anything this job does -- consistent with the
-# already-known pre-existing old-PG failures on the plain `test` job (see
-# this branch's own history: "Revert ci.yml pg-build-test switch:
-# pre-existing failures on old PG predate this branch").
+# and no bridge leg: extversion never changes across a leg, and there is no
+# known pg_upgrade-unsafe old version to bridge from.
 #
 # Scope: push only runs on master (post-merge); PR commits are covered by
 # pull_request -- avoids double-running CI for the same commit.
