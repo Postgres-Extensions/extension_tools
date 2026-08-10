@@ -16,7 +16,7 @@
     "name": "extension_drop",
 
     "X_comment": "REQUIRED. Version of the distribution. http://pgxn.org/spec/#version",
-    "version": "1.0.0",
+    "version": "stable",
 
     "X_comment": "REQUIRED. Short description of distribution.",
     "abstract": "Run custom commands when an extension is dropped.",
@@ -41,7 +41,7 @@
             "file": "sql/extension_drop.sql",
 
             "X_comment": "REQUIRED. Version the extension is at.",
-            "version": "1.0.0",
+            "version": "stable",
 
             "X_comment": "Optional: \"abstract\": Description of the extension.",
             "abstract": "Run custom commands when an extension is dropped.",
