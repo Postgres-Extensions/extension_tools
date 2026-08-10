@@ -107,7 +107,7 @@ $(DESTDIR)$(datadir)/extension/cat_tools.control:
 # Style linter (see https://github.com/Postgres-Extensions/linter, vendored
 # at .vendor/linter -- lint.mk is the thin local hand-off, see its comment).
 # Scoped to the actively-maintained source rather than the default
-# `sql/ test/`: frozen, already-released version files (RELEASE.md's
+# `sql/ test/`: frozen, already-released version files (../ai/RELEASE.md's
 # "Ongoing development" section -- once a version is released, its
 # sql/<ext>--<version>.sql is never hand-edited again) would produce
 # permanent, unfixable findings and make `make lint` unusable as a CI
