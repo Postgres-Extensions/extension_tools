@@ -20,12 +20,12 @@
  *     (extension_drop.test_update_from) then ALTER EXTENSION UPDATE -- to
  *     extension_drop.test_update_to when that GUC is non-empty, otherwise to
  *     the current default_version. extension_drop.test_update_from defaults
- *     to 0.1.1, the last REAL published PGXN release (2017) -- its install
- *     script was recovered from PGXN's dist archive (never previously in
- *     this repo's git history) as sql/extension_drop--0.1.1.sql, with a
- *     matching update-diff script at sql/extension_drop--0.1.1--stable.sql
- *     (see HISTORY.asc/RELEASE.md). This branch is exercised in CI by the
- *     extension-update-test job.
+ *     to 0.1.1, the last REAL published PGXN release (2017);
+ *     sql/extension_drop--0.1.1.sql matches PGXN's dist archive
+ *     byte-for-byte, with a matching update-diff script at
+ *     sql/extension_drop--0.1.1--stable.sql (see HISTORY.asc/RELEASE.md).
+ *     This branch is exercised in CI as extra steps in the `test` job's
+ *     own matrix (see ci.yml).
  *   - existing: the extension is ALREADY installed (by a real binary
  *     pg_upgrade, or an ALTER EXTENSION UPDATE performed outside the
  *     suite). This branch must NOT drop/create/update it -- that would

@@ -13,10 +13,10 @@ PGXNTOOL_ENABLE_TEST_INSTALL = yes
 #     Running the SAME suite/expected output against the result asserts
 #     update behaves identically to a fresh install. TEST_UPDATE_FROM
 #     defaults to 0.1.1, extension_drop's last REAL published PGXN release
-#     (2017) -- its install script was recovered from PGXN's dist archive
-#     and committed as sql/extension_drop--0.1.1.sql (it was never in this
-#     repo's git history; see RELEASE.md and HISTORY.asc), with a matching
-#     update-diff script at sql/extension_drop--0.1.1--stable.sql. Empty
+#     (2017) -- sql/extension_drop--0.1.1.sql matches PGXN's originally
+#     published dist archive byte-for-byte (see RELEASE.md and HISTORY.asc),
+#     with a matching update-diff script at
+#     sql/extension_drop--0.1.1--stable.sql. Empty
 #     TEST_UPDATE_TO (the default) means "update to the current
 #     default_version", which is now the `stable` pseudo-version.
 #   - existing: the extension is ALREADY installed (a real pg_upgrade, or an
@@ -40,7 +40,7 @@ endif
 
 # update-mode version range (load.sql only reads these in update mode).
 # Empty TEST_UPDATE_TO means "update to the current default_version" (now
-# `stable`). TEST_UPDATE_FROM defaults to 0.1.1, the actual recovered compat
+# `stable`). TEST_UPDATE_FROM defaults to 0.1.1, the actual real compat
 # floor -- still overridable (e.g. once a second real release ships) but no
 # longer required on every invocation. The guard below just protects against
 # someone explicitly blanking it out (TEST_UPDATE_FROM= on the command line).
@@ -68,7 +68,7 @@ include pgxntool/base.mk
 # contents is a hard error instead of the check silently disappearing.
 PGXNTOOL_ENABLE_TEST_BUILD = yes
 
-# The recovered real 0.1.1 install script (see sql/extension_drop--0.1.1.sql
+# The real 0.1.1 install script (see sql/extension_drop--0.1.1.sql
 # and RELEASE.md) is a single-version file for a version that ISN'T the
 # current default_version ('stable'), so base.mk's DATA wildcard -- which
 # only picks up the CURRENT version file plus two-dash update-diff scripts,
@@ -78,13 +78,12 @@ PGXNTOOL_ENABLE_TEST_BUILD = yes
 # VERSION '0.1.1'` at all, even though the update-diff script depends on that
 # exact file being installed.
 #
-# NOTE: this used to need an explicit `DATA += sql/extension_drop--0.1.1.sql`
-# here (Postgres-Extensions/pgxntool#48) -- pgxntool 2.3.0 already includes
-# it in its own generated DATA list now that #48 is fixed upstream, so adding
-# it again duplicated the file in DATA and broke `make install` ("will not
-# overwrite just-created ... with ..."). Left this comment as a marker in
-# case a future pgxntool downgrade or DATA-generation change brings the gap
-# back -- verify with `make -s print-DATA` before assuming it's still needed.
+# NOTE: do NOT add an explicit `DATA += sql/extension_drop--0.1.1.sql` here --
+# pgxntool 2.3.0's own generated DATA list already includes it
+# (Postgres-Extensions/pgxntool#48), and duplicating it breaks `make install`
+# ("will not overwrite just-created ... with ..."). If a future pgxntool
+# downgrade or DATA-generation change ever stops covering this file, `make -s
+# print-DATA` is how to confirm that before adding the line back.
 
 testdeps: test_extension
 test_extension: $(DESTDIR)$datadir)/extension/extension_drop_test.control $(wildcard $(TESTDIR)/*)

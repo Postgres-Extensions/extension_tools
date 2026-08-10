@@ -1,19 +1,22 @@
 #!/bin/sh
 # Exercises the real extension_drop update path: 0.1.1 (the last REAL PGXN
-# release, recovered from PGXN's dist archive -- see sql/extension_drop--0.1.1.sql
-# and RELEASE.md/HISTORY.asc) -> stable (this repo's current source).
+# release, its install script matching PGXN's originally published 2017 dist
+# archive byte-for-byte -- see sql/extension_drop--0.1.1.sql and
+# RELEASE.md/HISTORY.asc) -> stable (this repo's current source).
 #
 # Assumes extension_drop and cat_tools are already built and installed into
 # the active PostgreSQL cluster (`make install`, which pulls in the cat_tools
 # deps target first) and that psql's ambient connection defaults reach it.
 #
-# Each step is PROVEN, not assumed -- see advanced-extension-testing.md
-# section 4 (the dependency-guard technique) and section 6(d) (dynamic
-# version assertions, never hardcoded):
+# Each step is PROVEN, not assumed: the dependency-guard checks actually
+# attempt the blocked DROP EXTENSION and inspect the real error, rather than
+# trusting the guard exists; the version check reads extension_drop.control's
+# default_version dynamically rather than hardcoding an expected value that
+# would silently drift out of sync with a future release.
 #   1. CREATE EXTENSION extension_drop VERSION '0.1.1' -- installs the
-#      recovered real historical release. CASCADE (to auto-install
-#      cat_tools) only exists from PG10 -- pre-PG10 needs cat_tools created
-#      explicitly first, same branch test/install/load.sql already uses.
+#      actual historical release. CASCADE (to auto-install cat_tools) only
+#      exists from PG10 -- pre-PG10 needs cat_tools created explicitly
+#      first, same as test/install/load.sql.
 #   2. Plant a dependency-guard view and prove a non-CASCADE DROP EXTENSION
 #      is blocked -- BEFORE the update, proving the guard actually attaches
 #      to the 0.1.1-era extension_drop__commands table.

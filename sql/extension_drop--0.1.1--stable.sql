@@ -1,19 +1,16 @@
 /*
  * Update path from 0.1.1 (extension_drop's last REAL published PGXN release,
- * 2017 -- recovered from PGXN's dist archive as sql/extension_drop--0.1.1.sql
- * since it was never committed to this repo's git history; see RELEASE.md
- * and HISTORY.asc) to `stable` (this repo's current in-development source).
+ * 2017; sql/extension_drop--0.1.1.sql matches PGXN's dist archive
+ * byte-for-byte -- see RELEASE.md and HISTORY.asc) to `stable` (this repo's
+ * current in-development source).
  *
- * The only actual behavioral delta between the two, found by diffing the
- * recovered 0.1.1 script against current sql/extension_drop.sql, is the
+ * The only actual behavioral delta between the two is the
  * extension_drop__event_trigger() function body gaining one entry-point
- * RAISE DEBUG line (added in the same commit that also fixed a cat_tools
- * function rename -- see git history of sql/extension_drop.sql). That's the
- * one change here.
+ * RAISE DEBUG line. That's the one change here.
  *
- * Two other differences the diff turned up are deliberately NOT replayed
- * here, because neither one changes anything about the objects this
- * extension leaves behind after install completes:
+ * Two other differences between 0.1.1 and `stable` are deliberately NOT
+ * replayed here, because neither one changes anything about the objects
+ * this extension leaves behind after install completes:
  *   - The client_min_messages save/restore HISTORY.asc's `stable` section
  *     documents removing: that code only ever ran inside the install
  *     script's own session, saving/restoring a GUC and dropping its own
