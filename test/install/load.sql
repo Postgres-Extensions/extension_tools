@@ -20,9 +20,8 @@
  *     (extension_drop.test_update_from) then ALTER EXTENSION UPDATE -- to
  *     extension_drop.test_update_to when that GUC is non-empty, otherwise to
  *     the current default_version. extension_drop.test_update_from defaults
- *     to 0.1.1 (see sql/extension_drop--0.1.1.sql and
- *     sql/extension_drop--0.1.1--stable.sql). This branch is exercised in CI
- *     as extra steps in the `test` job's own matrix (see ci.yml).
+ *     to 0.1.1 (see sql/extension_drop--0.1.1.sql). Exercised in CI as
+ *     extra steps in the `test` job's own matrix (see ci.yml).
  *   - existing: the extension is ALREADY installed (by a real binary
  *     pg_upgrade, or an ALTER EXTENSION UPDATE performed outside the
  *     suite). This branch must NOT drop/create/update it -- that would
