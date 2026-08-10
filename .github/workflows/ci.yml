@@ -165,8 +165,8 @@ jobs:
         uses: actions/checkout@v7
       - name: Test on PostgreSQL ${{ matrix.pg }}
         run: pg-build-test
-      # Real update-path leg (0.1.1, extension_drop's last REAL published PGXN
-      # release, its install script matching PGXN's dist archive
+      # Update-path leg (0.1.1, the only version of extension_drop published
+      # to PGXN, its install script matching PGXN's dist archive
       # byte-for-byte -- see sql/extension_drop--0.1.1.sql -> stable, current
       # source): runs here as extra steps in the same already-running
       # container/cluster rather than a separate job, since a whole extra
@@ -179,9 +179,9 @@ jobs:
       # and current) transitively hits cat_tools's _cat_tools.function__drop_temp,
       # which runs a hardcoded `DROP ROUTINE` -- syntax that doesn't exist
       # before PG11. This affects a FRESH install of current extension_drop on
-      # PG9.3-10 too, not just this update leg; it's a real, pre-existing
-      # incompatibility this repo's non-gating CI has never surfaced before
-      # now (flagged separately, not something to fix here).
+      # PG9.3-10 too, not just this update leg; it's a pre-existing
+      # incompatibility this repo's CI doesn't gate on (flagged separately,
+      # not something to fix here).
       #
       # rsync: pgxntool's test-build feature needs it (see
       # pgxntool/run-test-build.sh), but pg-build-test above never actually

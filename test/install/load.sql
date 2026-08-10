@@ -20,7 +20,7 @@
  *     (extension_drop.test_update_from) then ALTER EXTENSION UPDATE -- to
  *     extension_drop.test_update_to when that GUC is non-empty, otherwise to
  *     the current default_version. extension_drop.test_update_from defaults
- *     to 0.1.1, the last REAL published PGXN release (2017);
+ *     to 0.1.1, the only version of extension_drop published to PGXN (2017);
  *     sql/extension_drop--0.1.1.sql matches PGXN's dist archive
  *     byte-for-byte, with a matching update-diff script at
  *     sql/extension_drop--0.1.1--stable.sql (see HISTORY.asc/RELEASE.md).

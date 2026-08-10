@@ -12,8 +12,8 @@ PGXNTOOL_ENABLE_TEST_INSTALL = yes
 #     UPDATE -- to TEST_UPDATE_TO if set, otherwise to the current version.
 #     Running the SAME suite/expected output against the result asserts
 #     update behaves identically to a fresh install. TEST_UPDATE_FROM
-#     defaults to 0.1.1, extension_drop's last REAL published PGXN release
-#     (2017) -- sql/extension_drop--0.1.1.sql matches PGXN's originally
+#     defaults to 0.1.1, the only version of extension_drop published to
+#     PGXN (2017) -- sql/extension_drop--0.1.1.sql matches PGXN's originally
 #     published dist archive byte-for-byte (see RELEASE.md and HISTORY.asc),
 #     with a matching update-diff script at
 #     sql/extension_drop--0.1.1--stable.sql. Empty
@@ -40,10 +40,10 @@ endif
 
 # update-mode version range (load.sql only reads these in update mode).
 # Empty TEST_UPDATE_TO means "update to the current default_version" (now
-# `stable`). TEST_UPDATE_FROM defaults to 0.1.1, the actual real compat
-# floor -- still overridable (e.g. once a second real release ships) but no
-# longer required on every invocation. The guard below just protects against
-# someone explicitly blanking it out (TEST_UPDATE_FROM= on the command line).
+# `stable`). TEST_UPDATE_FROM defaults to 0.1.1, the version this repo's
+# update-path testing currently supports -- still overridable (e.g. once a
+# later release ships). The guard below just protects against someone
+# explicitly blanking it out (TEST_UPDATE_FROM= on the command line).
 TEST_UPDATE_FROM ?= 0.1.1
 TEST_UPDATE_TO ?=
 ifeq ($(TEST_LOAD_SOURCE),update)
@@ -68,7 +68,7 @@ include pgxntool/base.mk
 # contents is a hard error instead of the check silently disappearing.
 PGXNTOOL_ENABLE_TEST_BUILD = yes
 
-# The real 0.1.1 install script (see sql/extension_drop--0.1.1.sql
+# The 0.1.1 install script (see sql/extension_drop--0.1.1.sql
 # and RELEASE.md) is a single-version file for a version that ISN'T the
 # current default_version ('stable'), so base.mk's DATA wildcard -- which
 # only picks up the CURRENT version file plus two-dash update-diff scripts,

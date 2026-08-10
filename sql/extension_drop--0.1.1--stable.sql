@@ -1,6 +1,6 @@
 /*
- * Update path from 0.1.1 (extension_drop's last REAL published PGXN release,
- * 2017; sql/extension_drop--0.1.1.sql matches PGXN's dist archive
+ * Update path from 0.1.1 (the only version of extension_drop published to
+ * PGXN, 2017; sql/extension_drop--0.1.1.sql matches PGXN's dist archive
  * byte-for-byte -- see RELEASE.md and HISTORY.asc) to `stable` (this repo's
  * current in-development source).
  *
