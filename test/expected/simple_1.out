@@ -11,5 +11,5 @@ ok 8 - Add extension command
 ok 9 - Dropping extension with bad command should fail
 ok 10 - Drop extension command
 ok 11 - Drop test extension
-ok 12 - extension_drop's schema should not be reachable via search_path
+ok 12 # SKIP existing mode: extension_drop's placement is outside this suite's control
 # TRANSACTION INTENTIONALLY LEFT OPEN!
