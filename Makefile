@@ -64,16 +64,6 @@ include pgxntool/base.mk
 # contents is a hard error instead of the check silently disappearing.
 PGXNTOOL_ENABLE_TEST_BUILD = yes
 
-# The 0.1.1 install script (see sql/extension_drop--0.1.1.sql
-# and RELEASE.md) is a single-version file for a version that ISN'T the
-# current default_version ('stable'), so base.mk's DATA wildcard -- which
-# only picks up the CURRENT version file plus two-dash update-diff scripts,
-# not other historical single-version install files -- won't ship it on its
-# own. Without this, `pgxn install extension_drop` (or any local `make
-# install`) would silently stop being able to `CREATE EXTENSION extension_drop
-# VERSION '0.1.1'` at all, even though the update-diff script depends on that
-# exact file being installed.
-#
 # NOTE: do NOT add an explicit `DATA += sql/extension_drop--0.1.1.sql` here --
 # pgxntool 2.3.0's own generated DATA list already includes it
 # (Postgres-Extensions/pgxntool#48), and duplicating it breaks `make install`

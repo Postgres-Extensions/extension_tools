@@ -176,10 +176,8 @@ jobs:
       # extension_drop's install script calls unconditionally, in both 0.1.1
       # and current) transitively hits cat_tools's _cat_tools.function__drop_temp,
       # which runs a hardcoded `DROP ROUTINE` -- syntax that doesn't exist
-      # before PG11. This affects a FRESH install of current extension_drop on
-      # PG9.3-10 too, not just this update leg; it's a pre-existing
-      # incompatibility this repo's CI doesn't gate on (flagged separately,
-      # not something to fix here).
+      # before PG11 -- see
+      # https://github.com/Postgres-Extensions/extension_tools/issues/44.
       #
       # rsync: pgxntool's test-build feature needs it (see
       # pgxntool/run-test-build.sh), but pg-build-test above never actually

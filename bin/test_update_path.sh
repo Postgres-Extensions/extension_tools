@@ -5,11 +5,11 @@
 # the active PostgreSQL cluster (`make install`, which pulls in the cat_tools
 # deps target first) and that psql's ambient connection defaults reach it.
 #
-# Each step is PROVEN, not assumed: the dependency-guard checks actually
-# attempt the blocked DROP EXTENSION and inspect the real error, rather than
-# trusting the guard exists; the version check reads extension_drop.control's
-# default_version dynamically rather than hardcoding an expected value that
-# would silently drift out of sync with a future release.
+# The dependency-guard checks attempt the blocked DROP EXTENSION and inspect
+# the actual error, rather than trusting the guard exists; the version check
+# reads extension_drop.control's default_version dynamically rather than
+# hardcoding an expected value that would silently drift out of sync with a
+# future release.
 #   1. CREATE EXTENSION extension_drop VERSION '0.1.1' -- installs the
 #      actual historical release. CASCADE (to auto-install cat_tools) only
 #      exists from PG10 -- pre-PG10 needs cat_tools created explicitly
