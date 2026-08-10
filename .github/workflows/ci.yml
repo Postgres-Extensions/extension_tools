@@ -182,6 +182,17 @@ jobs:
       # PG9.3-10 too, not just this update leg; it's a real, pre-existing
       # incompatibility this repo's non-gating CI has never surfaced before
       # now (flagged separately, not something to fix here).
+      #
+      # rsync: pgxntool's test-build feature needs it (see
+      # pgxntool/run-test-build.sh), but pg-build-test above never actually
+      # exercises test-build -- it goes through a lower-level PGXS path that
+      # bypasses this repo's own `test:` Makefile target entirely. A plain
+      # `make test`/`make install` (this step, and pg-upgrade-test below)
+      # does, so it needs installing explicitly, same as pg-upgrade-test
+      # already does.
+      - name: Install rsync
+        if: matrix.pg >= 11
+        run: apt-get install -y rsync
       - name: "Prove the update path: install 0.1.1, plant guard, ALTER EXTENSION UPDATE, re-prove guard, assert version"
         if: matrix.pg >= 11
         run: bin/test_update_path.sh
