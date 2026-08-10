@@ -111,6 +111,9 @@ $(DESTDIR)$(datadir)/extension/cat_tools.control:
 # "Ongoing development" section -- once a version is released, its
 # sql/<ext>--<version>.sql is never hand-edited again) would produce
 # permanent, unfixable findings and make `make lint` unusable as a CI
-# gate. Lint the hand-maintained source instead.
-LINT_TARGETS = sql/extension_drop.sql test/
+# gate. $(EXTENSION_SQL_FILES) (pgxntool's control.mk.sh, from each
+# .control file at the repo root) is exactly the hand-maintained
+# sql/<ext>.sql for every extension this distribution provides, so this
+# keeps working if a second extension is ever added.
+LINT_TARGETS = $(EXTENSION_SQL_FILES) test/
 include lint.mk
