@@ -64,13 +64,6 @@ include pgxntool/base.mk
 # contents is a hard error instead of the check silently disappearing.
 PGXNTOOL_ENABLE_TEST_BUILD = yes
 
-# NOTE: do NOT add an explicit `DATA += sql/extension_drop--0.1.1.sql` here --
-# pgxntool 2.3.0's own generated DATA list already includes it
-# (Postgres-Extensions/pgxntool#48), and duplicating it breaks `make install`
-# ("will not overwrite just-created ... with ..."). If a future pgxntool
-# downgrade or DATA-generation change ever stops covering this file, `make -s
-# print-DATA` is how to confirm that before adding the line back.
-
 testdeps: test_extension
 test_extension: $(DESTDIR)$datadir)/extension/extension_drop_test.control $(wildcard $(TESTDIR)/*)
 $(DESTDIR)$datadir)/extension/extension_drop_test.control:
