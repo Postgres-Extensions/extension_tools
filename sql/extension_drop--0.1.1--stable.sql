@@ -1,8 +1,6 @@
 /*
- * Update path from 0.1.1 (the only version of extension_drop published to
- * PGXN, 2017; sql/extension_drop--0.1.1.sql matches PGXN's dist archive
- * byte-for-byte -- see RELEASE.md and HISTORY.asc) to `stable` (this repo's
- * current in-development source).
+ * Update path from 0.1.1 to `stable` (this repo's current in-development
+ * source).
  *
  * The only actual behavioral delta between the two is the
  * extension_drop__event_trigger() function body gaining one entry-point

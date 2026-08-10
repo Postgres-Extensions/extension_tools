@@ -12,13 +12,10 @@ PGXNTOOL_ENABLE_TEST_INSTALL = yes
 #     UPDATE -- to TEST_UPDATE_TO if set, otherwise to the current version.
 #     Running the SAME suite/expected output against the result asserts
 #     update behaves identically to a fresh install. TEST_UPDATE_FROM
-#     defaults to 0.1.1, the only version of extension_drop published to
-#     PGXN (2017) -- sql/extension_drop--0.1.1.sql matches PGXN's originally
-#     published dist archive byte-for-byte (see RELEASE.md and HISTORY.asc),
-#     with a matching update-diff script at
-#     sql/extension_drop--0.1.1--stable.sql. Empty
-#     TEST_UPDATE_TO (the default) means "update to the current
-#     default_version", which is now the `stable` pseudo-version.
+#     defaults to 0.1.1 (see sql/extension_drop--0.1.1.sql and
+#     sql/extension_drop--0.1.1--stable.sql). Empty TEST_UPDATE_TO (the
+#     default) means "update to the current default_version", which is now
+#     the `stable` pseudo-version.
 #   - existing: the extension is ALREADY installed (a real pg_upgrade, or an
 #     ALTER EXTENSION UPDATE done outside the suite). load.sql does not
 #     touch it; it only asserts presence + current version. Pair with
@@ -40,10 +37,9 @@ endif
 
 # update-mode version range (load.sql only reads these in update mode).
 # Empty TEST_UPDATE_TO means "update to the current default_version" (now
-# `stable`). TEST_UPDATE_FROM defaults to 0.1.1, the version this repo's
-# update-path testing currently supports -- still overridable (e.g. once a
-# later release ships). The guard below just protects against someone
-# explicitly blanking it out (TEST_UPDATE_FROM= on the command line).
+# `stable`). TEST_UPDATE_FROM defaults to 0.1.1, overridable if needed. The
+# guard below just protects against someone explicitly blanking it out
+# (TEST_UPDATE_FROM= on the command line).
 TEST_UPDATE_FROM ?= 0.1.1
 TEST_UPDATE_TO ?=
 ifeq ($(TEST_LOAD_SOURCE),update)

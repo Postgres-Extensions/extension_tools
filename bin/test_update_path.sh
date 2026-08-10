@@ -1,9 +1,5 @@
 #!/bin/sh
-# Exercises the extension_drop update path: 0.1.1 (the only version of
-# extension_drop published to PGXN, its install script matching PGXN's
-# originally published 2017 dist archive byte-for-byte -- see
-# sql/extension_drop--0.1.1.sql and RELEASE.md/HISTORY.asc) -> stable (this
-# repo's current source).
+# Exercises the extension_drop update path: 0.1.1 -> stable.
 #
 # Assumes extension_drop and cat_tools are already built and installed into
 # the active PostgreSQL cluster (`make install`, which pulls in the cat_tools

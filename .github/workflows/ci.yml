@@ -165,14 +165,12 @@ jobs:
         uses: actions/checkout@v7
       - name: Test on PostgreSQL ${{ matrix.pg }}
         run: pg-build-test
-      # Update-path leg (0.1.1, the only version of extension_drop published
-      # to PGXN, its install script matching PGXN's dist archive
-      # byte-for-byte -- see sql/extension_drop--0.1.1.sql -> stable, current
-      # source): runs here as extra steps in the same already-running
-      # container/cluster rather than a separate job, since a whole extra
-      # job means a whole extra container boot + PostgreSQL startup for no
-      # isolation benefit -- nothing about this leg needs its own
-      # environment, unlike e.g. pg_tle's job, which genuinely does.
+      # Update-path leg (0.1.1 -> stable): runs here as extra steps in the
+      # same already-running container/cluster rather than a separate job,
+      # since a whole extra job means a whole extra container boot +
+      # PostgreSQL startup for no isolation benefit -- nothing about this
+      # leg needs its own environment, unlike e.g. pg_tle's job, which
+      # genuinely does.
       #
       # PG11+ only: cat_tools.routine__parse_arg_types_text() (which
       # extension_drop's install script calls unconditionally, in both 0.1.1
