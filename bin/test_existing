@@ -53,27 +53,8 @@
 # non-CASCADE DROP EXTENSION fails, and actively PROVE that here (see
 # plant_guard): if the drop unexpectedly succeeds, this script fails CI. See
 # also test/sql/dependency_guard.sql, which proves the same mechanism as a
-# pgTAP test (a separate, rolled-back proof -- see EXISTING_MODE_EXCLUDE below
-# for why this script's guard uses a DIFFERENT schema name than that test's).
-#
-# EXISTING_MODE_EXCLUDE (below): test/sql/schema.sql's whole job is proving
-# the schema-targeting/quoting install pipeline -- it does this by freely
-# DROPping and recreating extension_drop (non-CASCADE) in several schemas,
-# which is fundamentally incompatible with a real, persistent dependency
-# guard: the very first statement in that file (a plain
-# `DROP EXTENSION extension_drop;`) would fail against a guarded database,
-# not because of a bug, but because the guard is doing exactly its job.
-# Confirmed hitting this running the flow locally (PG12->PG17): schema.sql's
-# first statement failed with the guard's own 2BP01 error. Not a regression --
-# schema.sql already runs, and is already proven, by the regular fresh `test`
-# job on every PostgreSQL major. Existing mode's job is different: prove the
-# SURVIVING install still works and wasn't silently reinstalled, which
-# dependency_guard.sql + simple.sql already cover. So it's excluded from the
-# existing-mode REGRESS list here, not papered over. (test/sql/zzz_build.sql
-# used to be excluded for a similar reason -- it's since been migrated to
-# pgxntool's native test/build/ feature, which runs as its own separate
-# installcheck invocation entirely outside the main REGRESS list, so there's
-# nothing left here to exclude it from.)
+# pgTAP test (a separate, rolled-back proof, using a different guard schema
+# than this script's own -- see GUARD_SCHEMA below).
 set -euo pipefail
 
 # Run from the repository root (where `make` works and test paths resolve),
@@ -89,18 +70,10 @@ cd "$(dirname "$(readlink -f "$0")")/.."
 # event trigger, all key off it) -- referencing its row type means the guard
 # needs no updating even if a future release adds a column to it. Uses a
 # DIFFERENT schema than test/sql/dependency_guard.sql's own
-# extension_drop_drop_guard (see the EXISTING_MODE_EXCLUDE comment above) so
-# the two never collide when both exist in the same database.
+# extension_drop_drop_guard so the two never collide when both exist in the
+# same database.
 GUARD_SCHEMA=extension_drop_ci_guard
 GUARD_VIEW=guard
-
-# See the top-of-file comment: schema.sql is excluded from the existing-mode
-# suite run, not because it's broken, but because its own job (freely
-# DROPping and recreating extension_drop in several schemas) is inherently
-# incompatible with a real, persistent dependency guard. It already runs,
-# and is already proven, by the regular fresh `test` job on every
-# PostgreSQL major.
-EXISTING_MODE_EXCLUDE="schema"
 
 # ---------------------------------------------------------------------------
 # psql helpers
@@ -203,19 +176,13 @@ prepare() {
   plant_guard "$db"
 }
 
-# Compute the existing-mode REGRESS list: every test/sql/*.sql basename
-# except EXISTING_MODE_EXCLUDE (see the top-of-file comment for why). Derived
-# from the actual directory contents (not a hardcoded full list) so a future
-# new test/sql file is automatically included in existing-mode runs unless
-# someone deliberately adds it to EXISTING_MODE_EXCLUDE.
+# Compute the existing-mode REGRESS list: every test/sql/*.sql basename,
+# derived from the actual directory contents (not a hardcoded list) so a
+# future new test/sql file is automatically included in existing-mode runs.
 existing_mode_regress() {
-  local f base
+  local f
   for f in test/sql/*.sql; do
-    base=$(basename "$f" .sql)
-    case " $EXISTING_MODE_EXCLUDE " in
-      *" $base "*) continue ;;
-    esac
-    echo "$base"
+    basename "$f" .sql
   done
 }
 
@@ -241,8 +208,8 @@ run_suite() {
   #      filesystem-touching step existing mode exists to avoid.
   #   2. verify-results depends on `test`, so it re-runs the suite; it must
   #      carry the SAME existing-mode overrides (including REGRESS) or it
-  #      would re-run the FULL suite (hitting the schema.sql conflict above)
-  #      instead of verifying THIS existing database.
+  #      would re-run the FULL suite instead of verifying THIS existing
+  #      database.
   # An ARRAY, not a flat string: REGRESS's value is itself multiple
   # space-separated test names, so passing it through a single unquoted
   # variable (like cat_tools's own $existing_args, which never needed a
