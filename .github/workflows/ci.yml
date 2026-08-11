@@ -8,22 +8,8 @@ name: CI
 # extension_drop version on an OLD cluster, plant a dependency guard, binary
 # pg_upgrade straight to a NEWER major, then run the suite in existing mode
 # against the real migrated objects (see bin/test_existing). No update step
-# and no bridge leg: extension_drop has only ever shipped one real version
-# (1.0.0 -- see HISTORY.asc/RELEASE.md; the only PGXN listing, 0.1.x from
-# 2017, predates the current SQL entirely), so extversion never changes
-# across a leg and there is no known pg_upgrade-unsafe old version to bridge
-# from (see ~/advanced-extension-testing.md §6c's own guidance not to build
-# that preemptively). Legs' old_pg floor is 12, NOT extension_drop's own
-# claimed 9.3 floor above: this workflow's CAT_TOOLS_GIT_REF (see below)
-# makes `make install` build cat_tools from the `0.3.0` git tag instead of
-# PGXN (see the Makefile's `cat_tools` target comment -- PGXN's published
-# cat_tools is a stale 2017 release extension_drop can't use), and that
-# current cat_tools requires PostgreSQL >= 12 for a fresh install (its own META.json,
-# build.requires.PostgreSQL). Below PG12, `make install` cannot complete at
-# all today, independent of anything this job does -- consistent with the
-# already-known pre-existing old-PG failures on the plain `test` job (see
-# this branch's own history: "Revert ci.yml pg-build-test switch:
-# pre-existing failures on old PG predate this branch").
+# and no bridge leg: extversion never changes across a leg, and there is no
+# known pg_upgrade-unsafe old version to bridge from.
 #
 # Scope: push only runs on master (post-merge); PR commits are covered by
 # pull_request -- avoids double-running CI for the same commit.
@@ -165,6 +151,36 @@ jobs:
         uses: actions/checkout@v7
       - name: Test on PostgreSQL ${{ matrix.pg }}
         run: pg-build-test
+      # Update-path leg (0.1.1 -> stable): runs here as extra steps in the
+      # same already-running container/cluster rather than a separate job,
+      # since a whole extra job means a whole extra container boot +
+      # PostgreSQL startup for no isolation benefit -- nothing about this
+      # leg needs its own environment, unlike e.g. pg_tle's job, which
+      # genuinely does.
+      #
+      # PG11+ only: cat_tools.routine__parse_arg_types_text() (which
+      # extension_drop's install script calls unconditionally, in both 0.1.1
+      # and current) transitively hits cat_tools's _cat_tools.function__drop_temp,
+      # which runs a hardcoded `DROP ROUTINE` -- syntax that doesn't exist
+      # before PG11 -- see
+      # https://github.com/Postgres-Extensions/extension_tools/issues/44.
+      #
+      # rsync: pgxntool's test-build feature needs it (see
+      # pgxntool/run-test-build.sh), but pg-build-test above never actually
+      # exercises test-build -- it goes through a lower-level PGXS path that
+      # bypasses this repo's own `test:` Makefile target entirely. A plain
+      # `make test`/`make install` (this step, and pg-upgrade-test below)
+      # does, so it needs installing explicitly, same as pg-upgrade-test
+      # already does.
+      - name: Install rsync
+        if: matrix.pg >= 11
+        run: apt-get install -y rsync
+      - name: "Prove the update path: install 0.1.1, plant guard, ALTER EXTENSION UPDATE, re-prove guard, assert version"
+        if: matrix.pg >= 11
+        run: bin/test_update_path.sh
+      - name: Run the pgTAP suite in update mode (0.1.1 -> stable) against the result
+        if: matrix.pg >= 11
+        run: make test-update
 
   # Proves extension_drop survives a BINARY pg_upgrade (in-place catalog
   # migration to a newer PostgreSQL major), not just a fresh install. Each

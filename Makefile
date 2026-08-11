@@ -11,12 +11,11 @@ PGXNTOOL_ENABLE_TEST_INSTALL = yes
 #   - update: CREATE EXTENSION at TEST_UPDATE_FROM, then ALTER EXTENSION
 #     UPDATE -- to TEST_UPDATE_TO if set, otherwise to the current version.
 #     Running the SAME suite/expected output against the result asserts
-#     update behaves identically to a fresh install. NOTE: extension_drop has
-#     never had a real second released version (PGXN's only listing is
-#     0.1.x from 2017, predating the current SQL entirely -- see HISTORY.asc
-#     and RELEASE.md), so TEST_UPDATE_FROM has no safe default; this mode is
-#     wired up and structurally ready, but there is nothing real to update
-#     FROM yet, and so no CI leg exercises it in this repo today.
+#     update behaves identically to a fresh install. TEST_UPDATE_FROM
+#     defaults to 0.1.1 (see sql/extension_drop--0.1.1.sql and
+#     sql/extension_drop--0.1.1--stable.sql). Empty TEST_UPDATE_TO (the
+#     default) means "update to the current default_version", which is now
+#     the `stable` pseudo-version.
 #   - existing: the extension is ALREADY installed (a real pg_upgrade, or an
 #     ALTER EXTENSION UPDATE done outside the suite). load.sql does not
 #     touch it; it only asserts presence + current version. Pair with
@@ -37,14 +36,15 @@ $(error TEST_LOAD_SOURCE must be 'fresh', 'update' or 'existing', got '$(TEST_LO
 endif
 
 # update-mode version range (load.sql only reads these in update mode).
-# Empty TEST_UPDATE_TO means "update to the current default_version". There
-# is no safe default for TEST_UPDATE_FROM (see above) -- require it
-# explicitly rather than pointing it at a version that doesn't exist.
-TEST_UPDATE_FROM ?=
+# Empty TEST_UPDATE_TO means "update to the current default_version" (now
+# `stable`). TEST_UPDATE_FROM defaults to 0.1.1, overridable if needed. The
+# guard below just protects against someone explicitly blanking it out
+# (TEST_UPDATE_FROM= on the command line).
+TEST_UPDATE_FROM ?= 0.1.1
 TEST_UPDATE_TO ?=
 ifeq ($(TEST_LOAD_SOURCE),update)
   ifeq ($(strip $(TEST_UPDATE_FROM)),)
-$(error TEST_UPDATE_FROM must be set when TEST_LOAD_SOURCE=update -- extension_drop has no prior released version yet to default it to)
+$(error TEST_UPDATE_FROM must not be blank when TEST_LOAD_SOURCE=update)
   endif
 endif
 
@@ -107,10 +107,13 @@ $(DESTDIR)$(datadir)/extension/cat_tools.control:
 # Style linter (see https://github.com/Postgres-Extensions/linter, vendored
 # at .vendor/linter -- lint.mk is the thin local hand-off, see its comment).
 # Scoped to the actively-maintained source rather than the default
-# `sql/ test/`: sql/extension_drop--1.0.0.sql is a frozen, already-released
-# version file (RELEASE.md's "Ongoing development" section -- once a version
-# is released, its sql/<ext>--<version>.sql is never hand-edited again), so
-# linting it would produce permanent, unfixable findings and make `make
-# lint` unusable as a CI gate. Lint the hand-maintained source instead.
-LINT_TARGETS = sql/extension_drop.sql test/
+# `sql/ test/`: frozen, already-released version files (RELEASE.md's
+# "Ongoing development" section -- once a version is released, its
+# sql/<ext>--<version>.sql is never hand-edited again) would produce
+# permanent, unfixable findings and make `make lint` unusable as a CI
+# gate. $(EXTENSION_SQL_FILES) (pgxntool's control.mk.sh, from each
+# .control file at the repo root) is exactly the hand-maintained
+# sql/<ext>.sql for every extension this distribution provides, so this
+# keeps working if a second extension is ever added.
+LINT_TARGETS = $(EXTENSION_SQL_FILES) test/
 include lint.mk
