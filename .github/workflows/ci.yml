@@ -17,16 +17,6 @@ on:
   push:
     branches: [master]
   pull_request:
-# CAT_TOOLS_GIT_REF is the Makefile's opt-in override (see its comment there)
-# to install cat_tools from a git ref instead of PGXN, for exactly this CI --
-# PGXN's published cat_tools is stuck at a stale 2017 release missing the
-# function extension_drop's SQL calls. Set at workflow level (not per-job) so
-# every job that builds/installs the extension, including ones in other
-# stacked PRs, picks it up automatically without its own copy of this value.
-# Revert this once cat_tools 0.3.0 is actually published to PGXN -- see
-# RELEASE.md's guardrail against cutting a release while this is still set.
-env:
-  CAT_TOOLS_GIT_REF: 0.3.0
 concurrency:
   # A superseded push's pg_upgrade matrix (several binary pg_upgrades) is
   # pure waste once a newer push on the same ref supersedes it.
@@ -311,6 +301,14 @@ jobs:
     container: pgxn/pgxn-tools
     env:
       PG_TLE_RELEASE: "1.5.2"
+      # This job always clones cat_tools from git (pg_tle registration needs
+      # source, never a filesystem/PGXN install), independent of the
+      # Makefile's cat_tools target -- so it needs its own explicit ref
+      # rather than sharing the now-removed top-level CAT_TOOLS_GIT_REF
+      # override. Pinned to the version extension_drop's META.in.json
+      # actually declares as its floor, not "stable" -- keeps this job
+      # deterministic even if cat_tools cuts a newer release later.
+      CAT_TOOLS_GIT_REF: 0.3.0
     steps:
       - name: Start PostgreSQL ${{ matrix.pg }}
         run: pg-start ${{ matrix.pg }}
@@ -347,17 +345,15 @@ jobs:
         # cat_tools must be registered BEFORE extension_drop: extension_drop
         # requires cat_tools, so the CASCADE install below needs cat_tools
         # already resolvable through pg_tle's own catalog by the time it
-        # runs. cat_tools is cloned fresh at the SAME git ref the Makefile's
-        # own filesystem `cat_tools` target pins to (CAT_TOOLS_GIT_REF),
-        # read via `make print-CAT_TOOLS_GIT_REF` so the two never drift
-        # apart. cat_tools vendors its own pgxntool copy directly (confirmed:
-        # its only git submodule is an unrelated linter, so a plain `git
-        # clone` alone gives a working `make run-pgtle`), so registering it
-        # needs nothing beyond the exact same target this repo uses on
-        # itself right after.
+        # runs. cat_tools is cloned fresh at this job's own CAT_TOOLS_GIT_REF
+        # (set above -- already in this step's environment via the job-level
+        # `env:`). cat_tools vendors its own pgxntool copy directly
+        # (confirmed: its only git submodule is an unrelated linter, so a
+        # plain `git clone` alone gives a working `make run-pgtle`), so
+        # registering it needs nothing beyond the exact same target this
+        # repo uses on itself right after.
         run: |
           psql -d template1 -c "CREATE EXTENSION pg_tle"
-          CAT_TOOLS_GIT_REF=$(make -s print-CAT_TOOLS_GIT_REF 2>/dev/null | sed -n 's/.*set to "\(.*\)"$/\1/p')
           git clone https://github.com/Postgres-Extensions/cat_tools.git /tmp/cat_tools_tle
           # -C on both git and make, rather than `cd`: this is one continuous
           # shell script (a multi-line `run:` block), so a bare `cd` here
