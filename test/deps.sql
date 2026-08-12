@@ -1,5 +1,7 @@
--- Add any test dependency statements here
--- Note: pgTap is loaded by setup.sql
+/*
+ * Add any test dependency statements here
+ * Note: pgTap is loaded by setup.sql
+ */
 
 /*
  * test/install/load.sql (fresh/update mode) installs extension_drop into a
