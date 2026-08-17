@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+#
+# Exit 0 if extension_drop.control's default_version is a real version (mid-
+# release-cut or forgot to reset after one) and exit 1 if it's `stable`
+# (normal, between-releases state). See ../ai/RELEASE.md's `stable`
+# pseudo-version convention.
+#
+# USAGE: bin/in_release [CONTROL_FILE]
+
+set -euo pipefail
+
+control_file="${1:-extension_drop.control}"
+default_version=$(sed -n "s/^default_version[[:space:]]*=[[:space:]]*'\(.*\)'/\1/p" "$control_file")
+
+[ "$default_version" != "stable" ]

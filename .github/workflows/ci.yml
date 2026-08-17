@@ -41,6 +41,22 @@ jobs:
       - name: Lint SQL
         run: make lint
 
+  # A release built while a dependency is git-pinned instead of PGXN can't
+  # actually be installed by a plain `pgxn install` -- see ../ai/RELEASE.md's
+  # pre-release checklist. This is the automated version of that check.
+  release-safety:
+    name: 🔒 No git-pinned deps while releasing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v5
+      - name: Fail if cutting a release with cat_tools git-pinned
+        run: |
+          if bin/in_release && [ -n "$CAT_TOOLS_GIT_REF$CAT_TOOLS_SKIP_INSTALL" ]; then
+            echo "::error::default_version is a real version (releasing) while CAT_TOOLS_GIT_REF/CAT_TOOLS_SKIP_INSTALL is set at the workflow level -- revert the override before releasing."
+            exit 1
+          fi
+
   # Cheap gate that lets the heavy pg-upgrade-test job below skip itself on
   # commits that touch only docs. Must run on every push/pull_request (no
   # paths-ignore on the workflow itself) -- otherwise the required
@@ -302,13 +318,12 @@ jobs:
     env:
       PG_TLE_RELEASE: "1.5.2"
       # This job always clones cat_tools from git (pg_tle registration needs
-      # source, never a filesystem/PGXN install), independent of the
-      # Makefile's cat_tools target -- so it needs its own explicit ref
-      # rather than sharing the now-removed top-level CAT_TOOLS_GIT_REF
-      # override. Pinned to the version extension_drop's META.in.json
-      # actually declares as its floor, not "stable" -- keeps this job
-      # deterministic even if cat_tools cuts a newer release later.
-      CAT_TOOLS_GIT_REF: 0.3.0
+      # source, never PGXN), so it needs its own ref regardless of the
+      # release-gated CAT_TOOLS_GIT_REF above. Empty by default (falls back
+      # to the `stable` tag below); set job-scoped only as a temporary
+      # override if PGXN's cat_tools goes stale again -- never at the
+      # workflow level, which release-safety guards against.
+      CAT_TOOLS_GIT_REF: ""
     steps:
       - name: Start PostgreSQL ${{ matrix.pg }}
         run: pg-start ${{ matrix.pg }}
@@ -345,13 +360,11 @@ jobs:
         # cat_tools must be registered BEFORE extension_drop: extension_drop
         # requires cat_tools, so the CASCADE install below needs cat_tools
         # already resolvable through pg_tle's own catalog by the time it
-        # runs. cat_tools is cloned fresh at this job's own CAT_TOOLS_GIT_REF
-        # (set above -- already in this step's environment via the job-level
-        # `env:`). cat_tools vendors its own pgxntool copy directly
-        # (confirmed: its only git submodule is an unrelated linter, so a
-        # plain `git clone` alone gives a working `make run-pgtle`), so
-        # registering it needs nothing beyond the exact same target this
-        # repo uses on itself right after.
+        # runs. cat_tools vendors its own pgxntool copy directly (confirmed:
+        # its only git submodule is an unrelated linter, so a plain `git
+        # clone` alone gives a working `make run-pgtle`), so registering it
+        # needs nothing beyond the exact same target this repo uses on
+        # itself right after.
         run: |
           psql -d template1 -c "CREATE EXTENSION pg_tle"
           git clone https://github.com/Postgres-Extensions/cat_tools.git /tmp/cat_tools_tle
@@ -359,7 +372,7 @@ jobs:
           # shell script (a multi-line `run:` block), so a bare `cd` here
           # would still be in effect for the `make run-pgtle` below that's
           # meant to run against OUR OWN checkout, not the cat_tools clone.
-          git -C /tmp/cat_tools_tle checkout "$CAT_TOOLS_GIT_REF"
+          git -C /tmp/cat_tools_tle checkout "${CAT_TOOLS_GIT_REF:-stable}"
           PGDATABASE=template1 make -C /tmp/cat_tools_tle run-pgtle
           PGDATABASE=template1 make run-pgtle
       - name: Verify no stray extension control files landed on the filesystem
@@ -411,7 +424,7 @@ jobs:
   # job succeeded or was skipped (e.g. a docs-only push skipping
   # pg-upgrade-test) and fails if any failed or were cancelled.
   all-checks-passed:
-    needs: [lint, changes, test, pg-upgrade-test, pg-tle-test]
+    needs: [lint, release-safety, changes, test, pg-upgrade-test, pg-tle-test]
     if: always()
     runs-on: ubuntu-latest
     steps:
