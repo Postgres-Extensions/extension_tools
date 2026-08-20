@@ -17,16 +17,13 @@ on:
   push:
     branches: [master]
   pull_request:
-# CAT_TOOLS_GIT_REF is the Makefile's opt-in override (see its comment there)
-# to install cat_tools from a git ref instead of PGXN, for exactly this CI --
-# PGXN's published cat_tools is stuck at a stale 2017 release missing the
-# function extension_drop's SQL calls. Set at workflow level (not per-job) so
-# every job that builds/installs the extension, including ones in other
-# stacked PRs, picks it up automatically without its own copy of this value.
-# Revert this once cat_tools 0.3.0 is actually published to PGXN -- see
-# RELEASE.md's guardrail against cutting a release while this is still set.
+# CAT_TOOLS_GIT_REF, set here, builds cat_tools from that git ref instead of
+# PGXN for every job that installs it (the Makefile's `cat_tools` target).
+# Empty by default; set it only if PGXN's published cat_tools ever can't
+# satisfy META.in.json's declared floor again. NEVER set it while cutting a
+# release -- see RELEASE.md. release-safety below enforces that automatically.
 env:
-  CAT_TOOLS_GIT_REF: 0.3.0
+  CAT_TOOLS_GIT_REF: ""
 concurrency:
   # A superseded push's pg_upgrade matrix (several binary pg_upgrades) is
   # pure waste once a newer push on the same ref supersedes it.
@@ -50,6 +47,22 @@ jobs:
         uses: actions/checkout@v5
       - name: Lint SQL
         run: make lint
+
+  # A release built while a dependency is git-pinned instead of PGXN can't
+  # actually be installed by a plain `pgxn install` -- see ../ai/RELEASE.md's
+  # pre-release checklist. This is the automated version of that check.
+  release-safety:
+    name: 🔒 No git-pinned deps while releasing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v5
+      - name: Fail if cutting a release with cat_tools git-pinned
+        run: |
+          if bin/in_release && [ -n "$CAT_TOOLS_GIT_REF$CAT_TOOLS_SKIP_INSTALL" ]; then
+            echo "::error::default_version is a real version (releasing) while CAT_TOOLS_GIT_REF/CAT_TOOLS_SKIP_INSTALL is set at the workflow level -- revert the override before releasing."
+            exit 1
+          fi
 
   # Cheap gate that lets the heavy pg-upgrade-test job below skip itself on
   # commits that touch only docs. Must run on every push/pull_request (no
@@ -311,6 +324,13 @@ jobs:
     container: pgxn/pgxn-tools
     env:
       PG_TLE_RELEASE: "1.5.2"
+      # This job always clones cat_tools from git (pg_tle registration needs
+      # source, never PGXN), so it needs its own ref regardless of the
+      # release-gated CAT_TOOLS_GIT_REF above. Empty by default (falls back
+      # to the `stable` tag below); set job-scoped only as a temporary
+      # override if PGXN's cat_tools goes stale again -- never at the
+      # workflow level, which release-safety guards against.
+      CAT_TOOLS_GIT_REF: ""
     steps:
       - name: Start PostgreSQL ${{ matrix.pg }}
         run: pg-start ${{ matrix.pg }}
@@ -347,23 +367,19 @@ jobs:
         # cat_tools must be registered BEFORE extension_drop: extension_drop
         # requires cat_tools, so the CASCADE install below needs cat_tools
         # already resolvable through pg_tle's own catalog by the time it
-        # runs. cat_tools is cloned fresh at the SAME git ref the Makefile's
-        # own filesystem `cat_tools` target pins to (CAT_TOOLS_GIT_REF),
-        # read via `make print-CAT_TOOLS_GIT_REF` so the two never drift
-        # apart. cat_tools vendors its own pgxntool copy directly (confirmed:
+        # runs. cat_tools vendors its own pgxntool copy directly (confirmed:
         # its only git submodule is an unrelated linter, so a plain `git
         # clone` alone gives a working `make run-pgtle`), so registering it
         # needs nothing beyond the exact same target this repo uses on
         # itself right after.
         run: |
           psql -d template1 -c "CREATE EXTENSION pg_tle"
-          CAT_TOOLS_GIT_REF=$(make -s print-CAT_TOOLS_GIT_REF 2>/dev/null | sed -n 's/.*set to "\(.*\)"$/\1/p')
           git clone https://github.com/Postgres-Extensions/cat_tools.git /tmp/cat_tools_tle
           # -C on both git and make, rather than `cd`: this is one continuous
           # shell script (a multi-line `run:` block), so a bare `cd` here
           # would still be in effect for the `make run-pgtle` below that's
           # meant to run against OUR OWN checkout, not the cat_tools clone.
-          git -C /tmp/cat_tools_tle checkout "$CAT_TOOLS_GIT_REF"
+          git -C /tmp/cat_tools_tle checkout "${CAT_TOOLS_GIT_REF:-stable}"
           PGDATABASE=template1 make -C /tmp/cat_tools_tle run-pgtle
           PGDATABASE=template1 make run-pgtle
       - name: Verify no stray extension control files landed on the filesystem
@@ -415,7 +431,7 @@ jobs:
   # job succeeded or was skipped (e.g. a docs-only push skipping
   # pg-upgrade-test) and fails if any failed or were cancelled.
   all-checks-passed:
-    needs: [lint, changes, test, pg-upgrade-test, pg-tle-test]
+    needs: [lint, release-safety, changes, test, pg-upgrade-test, pg-tle-test]
     if: always()
     runs-on: ubuntu-latest
     steps:
