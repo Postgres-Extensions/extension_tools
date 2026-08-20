@@ -17,6 +17,13 @@ on:
   push:
     branches: [master]
   pull_request:
+# CAT_TOOLS_GIT_REF, set here, builds cat_tools from that git ref instead of
+# PGXN for every job that installs it (the Makefile's `cat_tools` target).
+# Empty by default; set it only if PGXN's published cat_tools ever can't
+# satisfy META.in.json's declared floor again. NEVER set it while cutting a
+# release -- see RELEASE.md. release-safety below enforces that automatically.
+env:
+  CAT_TOOLS_GIT_REF: ""
 concurrency:
   # A superseded push's pg_upgrade matrix (several binary pg_upgrades) is
   # pure waste once a newer push on the same ref supersedes it.
