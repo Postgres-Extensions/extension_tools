@@ -4,7 +4,7 @@ Run custom commands when an extension is dropped. By default, `DROP
 EXTENSION` simply drops all the objects the extension owns; this lets you
 register additional SQL to run when a given extension is dropped.
 
-Requires [cat_tools](https://pgxn.org/dist/cat_tools/) >= 0.2.1.
+Requires [cat_tools](https://pgxn.org/dist/cat_tools/) >= 0.3.0.
 
 ## Functions
 

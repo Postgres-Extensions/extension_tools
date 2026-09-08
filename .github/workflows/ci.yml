@@ -12,7 +12,8 @@ name: CI
 # known pg_upgrade-unsafe old version to bridge from.
 #
 # Scope: push only runs on master (post-merge); PR commits are covered by
-# pull_request -- avoids double-running CI for the same commit.
+# pull_request -- avoids double-running CI for the same commit. A diff
+# touching only .md/.asc files skips all three container jobs (see `changes`).
 on:
   push:
     branches: [master]
@@ -64,15 +65,19 @@ jobs:
             exit 1
           fi
 
-  # Cheap gate that lets the heavy pg-upgrade-test job below skip itself on
-  # commits that touch only docs. Must run on every push/pull_request (no
-  # paths-ignore on the workflow itself) -- otherwise the required
-  # all-checks-passed check would never report on a docs-only push and get
-  # stuck Pending in branch protection (~/advanced-extension-testing.md §6f).
-  # Deliberately NOT gating the pre-existing `test` job on this: `test` is
-  # already cheap (a single `pg-build-test` per PG major), so there is
-  # nothing costly to save by skipping it too -- only pg-upgrade-test (several
-  # real binary pg_upgrades per push) is worth gating.
+  # Cheap gate that lets every heavy job below skip itself on commits that
+  # touch only docs. Must run on every push/pull_request (no paths-ignore on
+  # the workflow itself) -- otherwise the required all-checks-passed check
+  # would never report on a docs-only push and get stuck Pending in branch
+  # protection (~/advanced-extension-testing.md §6f).
+  #
+  # Gating all three container jobs on this is safe because docs_only demands
+  # that EVERY changed path be .md/.asc: nothing extension_drop ships or
+  # builds with can be in such a diff -- not sql/, .control, META.json,
+  # Makefile, bin/, test/, pgxntool/ or .github/, and not a submodule bump
+  # either (a gitlink is recorded on the submodule's own extensionless path).
+  # lint and release-safety stay ungated: both are cheap, and release-safety
+  # is precisely the job that has to fire when HISTORY.asc changes.
   changes:
     name: 🔍 Detect docs-only changes
     runs-on: ubuntu-latest
@@ -141,13 +146,19 @@ jobs:
           echo "docs_only=$DOCS_ONLY" >> "$GITHUB_OUTPUT"
 
   test:
-    # Gated behind lint: the 12-leg PG matrix below is comparatively
-    # expensive, and every leg would fail anyway on a baseline that's already
-    # broken by a lint violation. success() is required explicitly once a
-    # job's `if:` references anything -- GitHub only assumes success() as a
-    # default when no `if:` is written at all.
-    needs: [lint]
-    if: success()
+    # Gated behind lint (every leg would fail anyway on a baseline already
+    # broken by a lint violation) and behind changes (six pgxn-tools
+    # containers, each booting a real cluster, are pure waste on a diff that
+    # can't affect any of them). Adding the changes dependency doesn't cost
+    # lint its head start: changes is a checkout plus a git diff, no database
+    # and no container, so it runs alongside lint rather than ahead of it,
+    # and nothing container-based starts until both cheap jobs are done.
+    #
+    # success() is required explicitly once a job's `if:` references
+    # anything -- GitHub only assumes success() as a default when no `if:`
+    # is written at all.
+    needs: [lint, changes]
+    if: success() && needs.changes.outputs.docs_only != 'true'
     strategy:
       matrix:
         # Floor matches cat_tools's own declared PostgreSQL requirement
@@ -307,8 +318,16 @@ jobs:
     # test. success() is required explicitly once a job's `if:` references
     # anything -- GitHub only assumes success() as a default when no `if:` is
     # written at all.
-    needs: [test]
-    if: success()
+    #
+    # docs_only is restated here rather than inherited from `test`, which is
+    # already gated on it. At job level success() is false when a needed job
+    # merely SKIPPED, not only when it failed, so a skipped `test` does
+    # cascade a skip to here -- but GitHub considers that a bug and intends
+    # to fix it (community discussion 45058). Depending on it would silently
+    # put this matrix back on every docs-only push the day they do. Same
+    # reason pg-upgrade-test states the condition itself.
+    needs: [changes, test]
+    if: success() && needs.changes.outputs.docs_only != 'true'
     strategy:
       matrix:
         # Intersection of two independently-moving ranges, checked directly
@@ -428,8 +447,10 @@ jobs:
   # A single stable check name for use as a required status check in branch
   # protection. Matrix jobs produce names like "🐘 PostgreSQL 14" that change
   # with the matrix; this aggregates them into one. It passes if every needed
-  # job succeeded or was skipped (e.g. a docs-only push skipping
-  # pg-upgrade-test) and fails if any failed or were cancelled.
+  # job succeeded or was skipped (e.g. a docs-only push skipping all three
+  # container jobs) and fails if any failed or were cancelled. always() is
+  # what keeps that true: an `if: success()` here would go false on the very
+  # skips this job is meant to accept.
   all-checks-passed:
     needs: [lint, release-safety, changes, test, pg-upgrade-test, pg-tle-test]
     if: always()
