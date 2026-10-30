@@ -1,0 +1,16 @@
+\set ECHO none
+1..13
+ok 1 - Insert into extension_drop_test_table
+ok 2 - Create schema
+ok 3 - Create test extension in schema
+ok 4 - Verify extension_drop__get()
+ok 5 - Drop schema cascade
+ok 6 - Test extension does not exist
+ok 7 - extension_drop_test_table is empty
+ok 8 - No stale registration
+ok 9 - Create test extension
+ok 10 - Test extension exists
+ok 11 - Drop test extension
+ok 12 - Test extension does not exist
+ok 13 # SKIP existing mode: extension_drop's placement is outside this suite's control
+# TRANSACTION INTENTIONALLY LEFT OPEN!

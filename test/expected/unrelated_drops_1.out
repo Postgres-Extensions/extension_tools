@@ -1,0 +1,10 @@
+\set ECHO none
+1..7
+ok 1 - Create non-superuser role
+ok 2 - Non-superuser DROP SCHEMA CASCADE
+ok 3 - Non-superuser DROP OWNED BY
+ok 4 - Insert stale registration
+ok 5 - Stale registration is present
+ok 6 - Superuser DROP SCHEMA with stale registration
+ok 7 # SKIP existing mode: extension_drop's placement is outside this suite's control
+# TRANSACTION INTENTIONALLY LEFT OPEN!

@@ -1,0 +1,16 @@
+\set ECHO none
+1..13
+ok 1 - Insert into extension_drop_test_table
+ok 2 - Create role
+ok 3 - Create test extension as role
+ok 4 - Verify extension_drop__get()
+ok 5 - Drop owned
+ok 6 - Test extension does not exist
+ok 7 - extension_drop_test_table is empty
+ok 8 - No stale registration
+ok 9 - Create test extension
+ok 10 - Test extension exists
+ok 11 - Drop test extension
+ok 12 - Test extension does not exist
+ok 13 - extension_drop's schema should not be reachable via search_path
+# TRANSACTION INTENTIONALLY LEFT OPEN!

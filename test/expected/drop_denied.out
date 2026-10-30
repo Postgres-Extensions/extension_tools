@@ -1,0 +1,63 @@
+\set ECHO none
+1..60
+ok 1 - Create non-superuser role
+ok 2 - Create schema owned by role containing a registered extension
+ok 3 - Registered: DROP SCHEMA CASCADE without USAGE on extension_drop's schema
+ok 4 - Capture DETAIL and HINT
+ok 5 - DETAIL
+ok 6 - HINT
+ok 7 - Grant USAGE on extension_drop's schema
+ok 8 - Registered: DROP SCHEMA CASCADE with USAGE but no table privileges
+ok 9 - Capture DETAIL
+ok 10 - DETAIL is the original error
+ok 11 - Grant SELECT
+ok 12 - Registered: DROP SCHEMA CASCADE with SELECT but not DELETE
+ok 13 - Grant DELETE, register SQL that needs CREATEROLE
+ok 14 - Registered SQL's own privilege error surfaces unchanged
+ok 15 - Register harmless SQL
+ok 16 - Registered: DROP SCHEMA CASCADE with the privileges the HINT names
+ok 17 - No stale registration
+ok 18 - Registration removed
+ok 19 - Recreate the registered extension
+ok 20 - Move the grants from the role to a group it belongs to
+ok 21 - Registered: DROP SCHEMA CASCADE with the privileges held through a group role
+ok 22 - Remove all of the role's access
+ok 23 - Recreate the extension
+ok 24 - Unregister the extension
+ok 25 - Unregistered: DROP SCHEMA CASCADE without USAGE on extension_drop's schema
+ok 26 - Grant USAGE on extension_drop's schema
+ok 27 - Unregistered: DROP SCHEMA CASCADE with USAGE but no table privileges
+ok 28 - Recreate the extension
+ok 29 - Unregister the extension
+ok 30 - Unregistered: DROP OWNED BY with USAGE but no table privileges
+ok 31 - Recreate the extension
+ok 32 - Unregister the extension
+ok 33 - Grant SELECT
+ok 34 - Unregistered: DROP SCHEMA CASCADE with SELECT but not DELETE
+ok 35 - Revoke SELECT
+ok 36 - Recreate the extension
+ok 37 - Unregister the extension
+ok 38 - Revoke EXECUTE on the helper
+ok 39 - Unregistered: DROP SCHEMA CASCADE without EXECUTE on the helper or table privileges
+ok 40 - Restore EXECUTE on the helper
+ok 41 - Superuser drop schema
+ok 42 - Recreate the registered extension
+ok 43 - Registered extension is still found when the caller has a temp table of the same name
+ok 44 - Unregister the extension
+ok 45 - Superuser drop schema
+ok 46 - Recreate the extension
+ok 47 - Unregister the extension
+ok 48 - Insert a stale registration
+ok 49 - Unregistered: DROP SCHEMA CASCADE with a stale registration present
+ok 50 - Repair
+ok 51 - Superuser drop schema
+ok 52 - Create role
+ok 53 - Create test extension as role
+ok 54 - Demote role
+ok 55 - DROP EXTENSION by the extension's non-superuser owner
+ok 56 - Unregister the extension
+ok 57 - Grant USAGE on extension_drop's schema
+ok 58 - Unregistered: DROP EXTENSION by the extension's non-superuser owner with USAGE but no table privileges
+ok 59 - No stale registration
+ok 60 - extension_drop's schema should not be reachable via search_path
+# TRANSACTION INTENTIONALLY LEFT OPEN!
