@@ -12,7 +12,14 @@ the event trigger runs as whichever role drops an extension, and resolves
 `ALTER EXTENSION ... UPDATE` fail unless it does; the error's HINT gives the
 exact `GRANT USAGE ON SCHEMA ... TO PUBLIC` to run first. An event trigger
 (`extension_drop_usage_guard`, on `ddl_command_end` for `REVOKE` and `DROP
-OWNED`) rejects any later command that would remove it.
+OWNED`) rejects any later command that would remove it. If PUBLIC loses USAGE
+anyway (a superuser bypassed the trigger), every `REVOKE` and `DROP OWNED`
+fails with "PUBLIC lacks USAGE on schema ..." until the `GRANT` in its HINT
+is run.
+
+Granting USAGE to `PUBLIC` also exposes every other object in that schema
+that has `PUBLIC` privileges (functions are executable by `PUBLIC` by
+default), so install extension_drop into a schema dedicated to it.
 
 ## Functions
 

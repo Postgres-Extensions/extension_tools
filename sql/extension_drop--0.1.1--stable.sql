@@ -297,13 +297,15 @@ $fn$
       , $fn$
 DECLARE
   ns oid := (SELECT e.extnamespace FROM pg_catalog.pg_extension e WHERE e.extname = 'extension_drop');
+  nsname text;
 BEGIN
   -- Not installed any more (e.g. DROP OWNED dropped it): nothing to protect.
   IF ns IS NOT NULL AND NOT pg_catalog.has_schema_privilege('public', ns, 'USAGE') THEN
-    RAISE EXCEPTION '% would remove PUBLIC''s USAGE on schema %'
-        , tg_tag, (SELECT pg_catalog.quote_ident(n.nspname) FROM pg_catalog.pg_namespace n WHERE n.oid = ns)
+    nsname := (SELECT pg_catalog.quote_ident(n.nspname) FROM pg_catalog.pg_namespace n WHERE n.oid = ns);
+    RAISE EXCEPTION 'PUBLIC lacks USAGE on schema %, which extension_drop requires', nsname
       USING ERRCODE = 'object_not_in_prerequisite_state'
-        , HINT = 'extension_drop fires when any role drops an extension, and resolves extension_drop__registered() as that role, which needs USAGE on the schema; PUBLIC must keep it.';
+        , DETAIL = pg_catalog.format('Checked after %s.', tg_tag)
+        , HINT = pg_catalog.format('Run GRANT USAGE ON SCHEMA %s TO PUBLIC. extension_drop resolves extension_drop__registered() as whichever role drops an extension, which needs USAGE on the schema.', nsname);
   END IF;
 END
 $fn$
