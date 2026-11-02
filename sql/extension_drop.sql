@@ -37,11 +37,6 @@ CREATE FUNCTION __extension_drop.create_function(
 DECLARE
   c_clean_args text := cat_tools.routine__parse_arg_types_text(args);
 
-  /*
-   * Every permanent function resolves names through pg_catalog only, so nothing a caller can create in a
-   * schema they control is ever resolved. Bodies refer to our own objects through @extension_schema@
-   * (an identifier) or @extension_schema_literal@ (the same text as a string literal).
-   */
   ext_schema text := COALESCE(
     (
       SELECT pg_catalog.quote_ident(n.nspname)
@@ -52,6 +47,11 @@ DECLARE
     , pg_catalog.quote_ident(pg_catalog.current_schema())
   );
 
+  /*
+   * Every permanent function is pinned to pg_catalog, pg_temp so nothing a caller can create in a schema
+   * they control is ever resolved. Bodies refer to our own objects through @extension_schema@ (an
+   * identifier) or @extension_schema_literal@ (the same text as a string literal).
+   */
   create_template CONSTANT text := $template$
 CREATE OR REPLACE FUNCTION %s(
 %s
@@ -312,11 +312,8 @@ $body$
 );
 
 /*
- * REGISTERED
- */
-/*
- * SECURITY DEFINER so the trigger can tell whether a dropped extension is registered without the caller
- * needing table access; reads only, never runs registered SQL.
+ * REGISTERED: SECURITY DEFINER so the trigger can tell whether a dropped extension is registered without
+ * the caller needing table access; reads only, never runs registered SQL.
  */
 SELECT __extension_drop.create_function(
   'extension_drop__registered'
@@ -411,23 +408,24 @@ BEGIN
     GET STACKED DIAGNOSTICS msg = MESSAGE_TEXT;
 
     -- Names are always double-quoted (embedded quotes doubled) in the primary message.
-    SELECT n.nspname, c.relname, pg_catalog.pg_get_userbyid(c.relowner) AS owner
+    SELECT o.owner
         , pg_catalog.format('%I.%I', n.nspname, c.relname) AS qname
-        , pg_catalog.format('"%s"', pg_catalog.replace(n.nspname, '"', '""')) AS dq_nspname
-        , pg_catalog.format('"%s"', pg_catalog.replace(c.relname, '"', '""')) AS dq_relname
-        , pg_catalog.format('"%s"', pg_catalog.replace(pg_catalog.pg_get_userbyid(c.relowner), '"', '""')) AS dq_owner
+        , (SELECT pg_catalog.array_agg(pg_catalog.format('"%s"', pg_catalog.replace(u.x, '"', '""')) ORDER BY u.ord)
+            FROM pg_catalog.unnest(ARRAY[n.nspname::text, c.relname::text, o.owner::text]) WITH ORDINALITY u(x, ord)
+          ) AS dq -- schema, table, owner
       INTO t
       FROM pg_catalog.pg_extension e
         JOIN pg_catalog.pg_class c
           ON c.relnamespace = e.extnamespace AND c.relname = 'extension_drop__commands'
         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        CROSS JOIN LATERAL (SELECT pg_catalog.pg_get_userbyid(c.relowner) AS owner) o
       WHERE e.extname = 'extension_drop';
     IF NOT FOUND THEN
       RAISE;
     END IF;
 
     RAISE EXCEPTION 'permission denied for table %.% (owned by role %), which extension_drop needs to drop extension(s) %'
-        , t.dq_nspname, t.dq_relname, t.dq_owner, dropping
+        , t.dq[1], t.dq[2], t.dq[3], dropping
       USING ERRCODE = 'insufficient_privilege'
         , DETAIL = msg
         , HINT = pg_catalog.format(
@@ -436,8 +434,8 @@ BEGIN
   END;
 
   /*
-   * Registered SQL gets our schema on its path, as it would from a caller's own session; the pinned path
-   * comes back before any of this function's own code runs.
+   * Registered SQL runs with path pg_catalog, <our schema>, pg_temp. The pin is restored right after so
+   * the rest of this function never sees our schema (the function-exit restore covers an error).
    */
   FOR i IN 1 .. COALESCE(pg_catalog.array_length(cmds, 1), 0) LOOP
     RAISE DEBUG E'extension "%" is being dropped; executing SQL:\n%', names[i], cmds[i];

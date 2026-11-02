@@ -20,7 +20,7 @@ SELECT plan(
   + 3 -- Unregistered, no table privileges: DROP OWNED BY
   + 5 -- Unregistered, SELECT but not DELETE
   + 6 -- Helper not executable: falls through to the caller's DELETE
-  + 14 -- Planted operators in extension_drop's schema are not run by the helper or by a superuser's drops
+  + 15 -- Pinned search_path; planted operators in extension_drop's schema are not run by the helper or by a superuser's drops
   + 4 -- Temp table shadowing extension_drop__commands
   + 6 -- Stale registration
   + 4 -- DROP EXTENSION by a role that was a superuser when it created it
@@ -232,9 +232,16 @@ SELECT lives_ok(
 
 /*
  * A role with CREATE on extension_drop's schema must not be able to run code as anyone who calls into it.
- * Exact name[] operators there would beat pg_catalog's polymorphic anyarray ones for any function whose
- * path includes the schema.
+ * The planted operators are on the types the functions actually compare (name, name) and (name, text);
+ * an exact match in the schema beats pg_catalog's for any function whose path puts the schema first.
  */
+SELECT is(
+  (SELECT count(*)::int FROM pg_proc p
+    WHERE p.pronamespace = quote_ident(:'extension_drop_schema')::regnamespace AND p.proname LIKE 'extension_drop%'
+      AND p.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, pg_temp'])
+  , 0
+  , 'Every extension_drop function pins search_path to pg_catalog, pg_temp'
+);
 SELECT lives_ok(
   format('GRANT CREATE ON SCHEMA %I TO extension_drop_test_plain', :'extension_drop_schema')
   , 'Grant CREATE on extension_drop''s schema'
@@ -243,13 +250,17 @@ SELECT lives_ok(
   format($q$DO $d$
   BEGIN
     SET LOCAL ROLE extension_drop_test_plain;
-    CREATE FUNCTION %1$I.xd_test_hijack(name[], name[]) RETURNS boolean LANGUAGE plpgsql AS
+    CREATE FUNCTION %1$I.xd_test_hijack(name, name) RETURNS boolean LANGUAGE plpgsql AS
       $f$ BEGIN PERFORM set_config('extension_drop_test.hijacked', 'yes', false); RETURN true; END $f$;
-    CREATE OPERATOR %1$I.= (LEFTARG = name[], RIGHTARG = name[], FUNCTION = %1$I.xd_test_hijack);
-    CREATE OPERATOR %1$I.<> (LEFTARG = name[], RIGHTARG = name[], FUNCTION = %1$I.xd_test_hijack);
+    CREATE FUNCTION %1$I.xd_test_hijack(name, text) RETURNS boolean LANGUAGE plpgsql AS
+      $f$ BEGIN PERFORM set_config('extension_drop_test.hijacked', 'yes', false); RETURN true; END $f$;
+    CREATE OPERATOR %1$I.= (LEFTARG = name, RIGHTARG = name, FUNCTION = %1$I.xd_test_hijack(name, name));
+    CREATE OPERATOR %1$I.= (LEFTARG = name, RIGHTARG = text, FUNCTION = %1$I.xd_test_hijack(name, text));
+    CREATE OPERATOR %1$I.<> (LEFTARG = name, RIGHTARG = name, FUNCTION = %1$I.xd_test_hijack(name, name));
+    CREATE OPERATOR %1$I.<> (LEFTARG = name, RIGHTARG = text, FUNCTION = %1$I.xd_test_hijack(name, text));
     RESET ROLE;
   END $d$$q$, :'extension_drop_schema')
-  , 'Plant = and <> operators for name[] in extension_drop''s schema'
+  , 'Plant = and <> operators on (name, name) and (name, text) in extension_drop''s schema'
 );
 SELECT lives_ok(
   $$SELECT set_config('extension_drop_test.hijacked', 'no', false)$$
@@ -303,7 +314,7 @@ SELECT is(
 );
 
 SELECT lives_ok(
-  format('DROP OPERATOR %1$I.=(name[], name[]); DROP OPERATOR %1$I.<>(name[], name[]); DROP FUNCTION %1$I.xd_test_hijack(name[], name[])', :'extension_drop_schema')
+  format('DROP OPERATOR %1$I.=(name, name); DROP OPERATOR %1$I.=(name, text); DROP OPERATOR %1$I.<>(name, name); DROP OPERATOR %1$I.<>(name, text); DROP FUNCTION %1$I.xd_test_hijack(name, name); DROP FUNCTION %1$I.xd_test_hijack(name, text)', :'extension_drop_schema')
   , 'Remove the planted operators'
 );
 SELECT lives_ok(

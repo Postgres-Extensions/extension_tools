@@ -56,6 +56,7 @@ arbitrary SQL to run later. Grant them to specific roles as needed.
 - `extension_drop__sanity_error(bad name[]) RETURNS TABLE(message, detail, hint)`
   The text of the `XD001` error raised for the stale extensions `bad`; shared
   by `extension_drop__sanity_assert` and `extension_drop__registered`.
+  Granted to `PUBLIC` by default.
 
 - `extension_drop__repair() RETURNS void`
   Deletes any stale rows found by `extension_drop__sanity_check()`. This
@@ -72,7 +73,13 @@ trigger for every drop, but it returns immediately unless an extension is
 among the dropped objects.
 
 Every extension_drop function pins `search_path = pg_catalog, pg_temp`. The
-registered SQL itself runs with the extension_drop schema added to the path.
+registered SQL itself runs, as the dropping role, with `search_path =
+pg_catalog, <extension_drop's schema>, pg_temp`; schemas of extensions
+extension_drop depends on (such as cat_tools) are not on it, so registered
+SQL must qualify them. Because that path includes the extension_drop schema,
+CREATE on that schema is trusted: a role holding it can plant objects (for
+example an operator on types other than those `pg_catalog` matches exactly)
+that registered SQL will resolve. Don't grant it to untrusted roles.
 
 Dropping an unregistered extension needs only USAGE on the extension's
 schema (to resolve `extension_drop__registered()`, a `SECURITY DEFINER`
