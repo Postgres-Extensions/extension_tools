@@ -78,8 +78,8 @@ pg_catalog, <extension_drop's schema>, pg_temp`; schemas of extensions
 extension_drop depends on (such as cat_tools) are not on it, so registered
 SQL must qualify them. Because that path includes the extension_drop schema,
 CREATE on that schema is trusted: a role holding it can plant objects (for
-example an operator on types other than those `pg_catalog` matches exactly)
-that registered SQL will resolve. Don't grant it to untrusted roles.
+example a `varchar = varchar` operator, which `pg_catalog` has no exact match
+for) that registered SQL will resolve. Don't grant it to untrusted roles.
 
 Dropping an unregistered extension needs only USAGE on the extension's
 schema (to resolve `extension_drop__registered()`, a `SECURITY DEFINER`
