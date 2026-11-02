@@ -13,10 +13,13 @@ alone to have picked it up in that case.
 never hardcodes a schema for any permanent object — the one
 `CREATE SCHEMA __extension_drop` is transient scaffolding, created and
 dropped within the same install script, not where anything permanent
-lives. Its permanent functions pin their resolution via
-`SET search_path FROM CURRENT` at creation time rather than
-`@extschema@`-qualifying every reference; either technique gets to the
-same schema-independence property. It's genuinely schema-flexible. See
+lives. Every permanent function sets `search_path = pg_catalog, pg_temp`
+(so a role with CREATE on the extension's schema can't hijack operators or
+functions) and refers to its own objects through `@extension_schema@`, which
+the install and update scripts substitute with the quoted schema name.
+Registered SQL runs with the extension's schema added to the path, set
+immediately before each statement and restored right after. It's genuinely
+schema-flexible. See
 `../ai/CLAUDE.md`'s "Schema-flexibility testing" section for the general
 methodology (why `schema=` and not `relocatable=` is what matters, and how
 to actually prove search_path-independence).

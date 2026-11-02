@@ -1,0 +1,31 @@
+\set ECHO none
+1..20
+ok 1 - Create role
+ok 2 - REVOKE USAGE ON SCHEMA ... FROM PUBLIC is rejected
+ok 3 - PUBLIC still has USAGE
+ok 4 - REVOKE ALL ON SCHEMA ... FROM PUBLIC is rejected
+ok 5 - Capture HINT
+ok 6 - HINT says why
+ok 7 - REVOKE from a role other than PUBLIC is allowed
+ok 8 - PUBLIC keeps USAGE through the grantor's own grant
+ok 9 - DROP OWNED BY the grantor of PUBLIC's only USAGE is rejected
+ok 10 - DROP OWNED BY the grantor is allowed once PUBLIC has USAGE from the owner
+ok 11 - Drop extension_drop
+ok 12 - Install into a schema without PUBLIC USAGE fails
+ok 13 - Capture HINT
+ok 14 - HINT gives the exact GRANT
+WARNING:  function__arg_types_text() is deprecated, use routine__parse_arg_types_text instead
+WARNING:  function__arg_types_text() is deprecated, use routine__parse_arg_types_text instead
+WARNING:  function__arg_types_text() is deprecated, use routine__parse_arg_types_text instead
+WARNING:  function__arg_types_text() is deprecated, use routine__parse_arg_types_text instead
+WARNING:  function__arg_types_text() is deprecated, use routine__parse_arg_types_text instead
+WARNING:  function__arg_types_text() is deprecated, use routine__parse_arg_types_text instead
+WARNING:  function__arg_types_text() is deprecated, use routine__parse_arg_types_text instead
+WARNING:  function__arg_types_text() is deprecated, use routine__parse_arg_types_text instead
+ok 15 - Update of an install without PUBLIC USAGE fails
+ok 16 - Capture HINT
+ok 17 - HINT gives the exact GRANT
+ok 18 - Update succeeds once PUBLIC has USAGE, in a schema named x$body$y
+ok 19 - Updated to the current version
+ok 20 # SKIP existing mode: extension_drop's placement is outside this suite's control
+# TRANSACTION INTENTIONALLY LEFT OPEN!

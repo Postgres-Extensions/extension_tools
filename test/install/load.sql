@@ -152,6 +152,8 @@ SELECT 'extension_drop test schema ' || substr(md5(random()::text), 1, 12) AS ex
 \gset
 
 CREATE SCHEMA :"extension_drop_test_schema";
+-- extension_drop refuses to install without it (see extension_drop.sql)
+GRANT USAGE ON SCHEMA :"extension_drop_test_schema" TO PUBLIC;
 
 /*
  * CASCADE auto-installs cat_tools on PG10+; pre-PG10 needs it created

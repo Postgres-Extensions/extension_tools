@@ -6,6 +6,14 @@ register additional SQL to run when a given extension is dropped.
 
 Requires [cat_tools](https://pgxn.org/dist/cat_tools/) >= 0.3.0.
 
+`PUBLIC` must have USAGE on the schema extension_drop is installed in:
+the event trigger runs as whichever role drops an extension, and resolves
+`extension_drop__registered()` in that schema. `CREATE EXTENSION` and
+`ALTER EXTENSION ... UPDATE` fail unless it does; the error's HINT gives the
+exact `GRANT USAGE ON SCHEMA ... TO PUBLIC` to run first. An event trigger
+(`extension_drop_usage_guard`, on `ddl_command_end` for `REVOKE` and `DROP
+OWNED`) rejects any later command that would remove it.
+
 ## Functions
 
 None of these are granted to `PUBLIC` except where noted, since
@@ -28,7 +36,7 @@ arbitrary SQL to run later. Grant them to specific roles as needed.
 - `extension_drop__registered(extension_names name[]) RETURNS name[]`
   Returns those of `extension_names` that have registered drop commands, and
   asserts the table is sane when there are none. `SECURITY DEFINER`, with
-  `search_path = pg_catalog, pg_temp` and a schema-qualified table, so a role
+  `search_path = pg_catalog, pg_temp` and schema-qualified references, so a role
   with CREATE on the extension's schema can't make it run their code; used by
   the event trigger so dropping an unregistered extension needs no table
   access. Granted to `PUBLIC`, so any role with USAGE on the schema can ask
@@ -45,6 +53,10 @@ arbitrary SQL to run later. Grant them to specific roles as needed.
   Raises an error if `extension_drop__sanity_check()` (called with the same
   `ignore` argument) isn't empty. Granted to `PUBLIC` by default.
 
+- `extension_drop__sanity_error(bad name[]) RETURNS TABLE(message, detail, hint)`
+  The text of the `XD001` error raised for the stale extensions `bad`; shared
+  by `extension_drop__sanity_assert` and `extension_drop__registered`.
+
 - `extension_drop__repair() RETURNS void`
   Deletes any stale rows found by `extension_drop__sanity_check()`. This
   should never be needed in normal operation.
@@ -58,6 +70,9 @@ and runs the SQL registered for it via
 `extension_drop__add`/`extension_drop__update`. Those commands fire the
 trigger for every drop, but it returns immediately unless an extension is
 among the dropped objects.
+
+Every extension_drop function pins `search_path = pg_catalog, pg_temp`. The
+registered SQL itself runs with the extension_drop schema added to the path.
 
 Dropping an unregistered extension needs only USAGE on the extension's
 schema (to resolve `extension_drop__registered()`, a `SECURITY DEFINER`

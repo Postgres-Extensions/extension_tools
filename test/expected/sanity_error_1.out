@@ -1,0 +1,15 @@
+\set ECHO none
+1..12
+ok 1 - Insert a stale registration
+ok 2 - Capture the error from extension_drop__sanity_assert
+ok 3 - Capture the error from extension_drop__registered
+ok 4 - sanity_assert message
+ok 5 - sanity_assert DETAIL
+ok 6 - sanity_assert HINT
+ok 7 - registered message
+ok 8 - registered DETAIL
+ok 9 - registered HINT
+ok 10 - extension_drop__sanity_error returns the text both paths raised
+ok 11 - Plural wording
+ok 12 # SKIP existing mode: extension_drop's placement is outside this suite's control
+# TRANSACTION INTENTIONALLY LEFT OPEN!
