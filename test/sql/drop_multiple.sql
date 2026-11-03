@@ -24,6 +24,9 @@ SELECT plan(
   + 1 -- extension_drop's schema should not be on search_path (test/finish.sql)
 );
 
+-- The row extension_drop_test_b's recording registration produces (see below)
+\set B_ROW '$$SELECT ''extension_drop_test_b''::name, ''INSERT INTO pg_temp.extension_drop_test_ran(name) VALUES (''''extension_drop_test_b'''')''::text$$'
+
 SELECT lives_ok(
   'CREATE TEMP TABLE extension_drop_test_ran(name text)'
   , 'Create recording table'
@@ -73,7 +76,7 @@ SELECT bag_eq(
 );
 SELECT results_eq(
   format('SELECT extension_name, sql FROM %I.extension_drop__commands', :'extension_drop_schema')
-  , $$VALUES ('extension_drop_test_b'::name, 'INSERT INTO pg_temp.extension_drop_test_ran(name) VALUES (''extension_drop_test_b'')'::text)$$
+  , :B_ROW
   , 'The surviving extension keeps its registration'
 );
 ROLLBACK TO SAVEPOINT both_registered;
@@ -84,7 +87,7 @@ SELECT lives_ok(
 );
 SELECT bag_eq(
   format('SELECT extension_name, sql FROM %I.extension_drop__commands', :'extension_drop_schema')
-  , $$VALUES ('extension_drop_test'::name, 'SELECT 1'::text), ('extension_drop_test_b'::name, 'INSERT INTO pg_temp.extension_drop_test_ran(name) VALUES (''extension_drop_test_b'')'::text)$$
+  , :B_ROW || $$ UNION ALL SELECT 'extension_drop_test'::name, 'SELECT 1'::text$$
   , 'Update left the other registration unchanged'
 );
 
@@ -94,7 +97,7 @@ SELECT lives_ok(
 );
 SELECT results_eq(
   format('SELECT extension_name, sql FROM %I.extension_drop__commands', :'extension_drop_schema')
-  , $$VALUES ('extension_drop_test_b'::name, 'INSERT INTO pg_temp.extension_drop_test_ran(name) VALUES (''extension_drop_test_b'')'::text)$$
+  , :B_ROW
   , 'Remove left the other registration in place'
 );
 

@@ -29,7 +29,7 @@ SELECT lives_ok(
 );
 SELECT bag_eq(
   format($$SELECT * FROM %I.extension_drop__get('extension_drop_test')$$, :'extension_drop_schema')
-  , $$SELECT 'extension_drop_test'::name, 'DELETE FROM extension_drop_test_table'::text$$
+  , $$SELECT 'extension_drop_test'::name, 'DELETE FROM pg_temp.extension_drop_test_table'::text$$
   , 'Verify extension_drop__get()'
 );
 
