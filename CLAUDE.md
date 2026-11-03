@@ -17,10 +17,10 @@ lives. Every permanent function sets `search_path = pg_catalog, pg_temp`
 (so a role with CREATE on the extension's schema can't hijack operators or
 functions) and refers to its own objects through `@extension_schema@`, which
 the install and update scripts substitute with the quoted schema name.
-Registered SQL runs with `pg_catalog, <extension schema>, pg_temp`, set
-immediately before each statement and restored right after; CREATE on the
-extension schema is therefore trusted for registered SQL, and dependency
-schemas (e.g. cat_tools) are not on that path. It's genuinely
+Registered SQL runs under the event trigger's own pinned
+`pg_catalog, pg_temp`, reset before each registration; the extension's
+schema and dependency schemas (e.g. cat_tools) are not on that path, so
+registered SQL must qualify everything. It's genuinely
 schema-flexible. See
 `../ai/CLAUDE.md`'s "Schema-flexibility testing" section for the general
 methodology (why `schema=` and not `relocatable=` is what matters, and how

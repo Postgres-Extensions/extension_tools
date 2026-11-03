@@ -258,7 +258,7 @@ BEGIN
   PERFORM @extension_schema@.extension_drop__sanity_assert(NULL::name);
 END
 $body$
-  , $$Adds a set of commands to be run when an extension is dropped.$$
+  , $$Adds a set of commands to be run when an extension is dropped. The sql runs with search_path = pg_catalog, pg_temp: schema-qualify everything it uses.$$
   , '' -- Just revoke all access
 );
 
@@ -296,7 +296,7 @@ UPDATE @extension_schema@.extension_drop__commands d
   -- extension_drop__get() runs sanity checks for us
   WHERE d.extension_name = (@extension_schema@.extension_drop__get(extension_drop__update.extension_name)).extension_name
 $body$
-  , $$Update the set of commands to be run when an extension is dropped.$$
+  , $$Update the set of commands to be run when an extension is dropped. The sql runs with search_path = pg_catalog, pg_temp: schema-qualify everything it uses.$$
   , '' -- Just revoke all access
 );
 

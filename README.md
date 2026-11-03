@@ -36,10 +36,13 @@ None of these are granted to `PUBLIC` except where noted, since
 arbitrary SQL to run later. Grant them to specific roles as needed.
 
 - `extension_drop__add(extension_name name, sql text) RETURNS void`
-  Register `sql` to run when `extension_name` is dropped.
+  Register `sql` to run when `extension_name` is dropped. `sql` runs with
+  `search_path = pg_catalog, pg_temp`: schema-qualify everything it uses (see
+  [How it works](#how-it-works)).
 
 - `extension_drop__update(extension_name name, sql text) RETURNS void`
-  Replace the SQL registered for `extension_name`.
+  Replace the SQL registered for `extension_name`. The same `search_path`
+  rule applies.
 
 - `extension_drop__remove(extension_name name) RETURNS void`
   Remove the SQL registered for `extension_name`.
@@ -91,8 +94,11 @@ among the dropped objects.
 Every extension_drop function pins `search_path = pg_catalog, pg_temp`, and
 so does the registered SQL: it runs, as the dropping role, under the event
 trigger's own pinned path. **Registered SQL must schema-qualify everything it
-uses**: its own extension's objects, cat_tools, and extension_drop's
-functions. Nothing but `pg_catalog` and `pg_temp` is on its path, so a role
+uses**: tables and functions in any schema (including cat_tools and
+extension_drop's own functions). extension_drop's schema is whatever it was
+installed into; look it up with
+`SELECT extnamespace::regnamespace FROM pg_extension WHERE extname = 'extension_drop'`
+and build the SQL with `format('%I', ...)`. Nothing but `pg_catalog` and `pg_temp` is on its path, so a role
 with CREATE on any schema can't plant objects that registered SQL resolves.
 Registered SQL runs in no particular order when one command drops several
 extensions.
