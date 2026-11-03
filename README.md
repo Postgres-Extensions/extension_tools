@@ -101,7 +101,10 @@ installed into, so look it up and build the reference with `%s` (not `%I`:
 
     SELECT format('SELECT %s.extension_drop__get(%L)',
                   extnamespace::regnamespace, 'my_extension')
-      FROM pg_extension WHERE extname = 'extension_drop';
+      FROM pg_extension WHERE extname = 'extension_drop' \gexec
+
+`\gexec` (psql) runs the statement that was built; without it the query
+only returns the SQL as text.
 
 Nothing but `pg_catalog` and `pg_temp` is on the registered SQL's path, so a
 role with CREATE on any schema can't plant objects that it resolves.
