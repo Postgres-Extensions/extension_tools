@@ -9,8 +9,9 @@ DECLARE
   ext_schema text := pg_catalog.quote_ident(nsname);
 BEGIN
   IF NOT pg_catalog.has_schema_privilege('public', ns, 'USAGE') THEN
-    RAISE EXCEPTION 'extension_drop requires PUBLIC to have USAGE on schema %', ext_schema
+    RAISE EXCEPTION 'cannot update extension_drop in schema "%"', pg_catalog.replace(nsname, '"', '""')
       USING ERRCODE = 'object_not_in_prerequisite_state'
+        , DETAIL = 'extension_drop requires PUBLIC to have USAGE on the schema it is installed in.'
         , HINT = pg_catalog.format(
           'Run GRANT USAGE ON SCHEMA %s TO PUBLIC (creating the schema first if needed), then retry.'
           , ext_schema
@@ -134,6 +135,14 @@ BEGIN
 END
 $body$;
 
+/*
+ * WARNING: this function runs with its OWNER's rights whenever extension_drop__claim() (SECURITY DEFINER)
+ * calls it through extension_drop__sanity_assert(). Keep it definer-safe:
+ *   - pinned search_path (done by create_function); every reference to our objects goes through
+ *     @extension_schema@
+ *   - no dynamic SQL, and the only argument is compared against data, never interpolated
+ *   - it only reads
+ */
 SELECT __extension_drop.create_function(
   'extension_drop__sanity_check'
   , 'ignore name DEFAULT NULL'
@@ -149,6 +158,14 @@ $body$
   , $$Returns an array of extensions that have drop commands but do not exist. This array should always be empty!$$
 );
 
+/*
+ * WARNING: this function runs with its OWNER's rights whenever extension_drop__claim() (SECURITY DEFINER)
+ * calls it. Keep it definer-safe:
+ *   - pinned search_path (done by create_function); every reference to our objects goes through
+ *     @extension_schema@
+ *   - no dynamic SQL; the only argument reaches sanity_check as a comparison value
+ *   - the only text it raises is built from table contents, which are data, never executed
+ */
 SELECT __extension_drop.create_function(
   'extension_drop__sanity_assert'
   , 'ignore name DEFAULT NULL'
@@ -277,30 +294,32 @@ $body$
 );
 
 /*
- * REGISTERED: SECURITY DEFINER so the trigger can tell whether a dropped extension is registered without
- * the caller needing table access; reads only, never runs registered SQL.
+ * CLAIM: SECURITY DEFINER so a role that can drop an extension needs no privileges on
+ * extension_drop__commands. It only deletes and returns the registrations of extensions the current
+ * sql_drop command is dropping (outside a sql_drop trigger pg_event_trigger_dropped_objects() errors, so
+ * a direct call deletes nothing), then runs sanity_assert as the owner. It never runs the returned SQL:
+ * the event trigger does that as the dropping role.
  */
 SELECT __extension_drop.create_function(
-  'extension_drop__registered'
-  , $$
-  extension_names name[]
-$$
-  , 'name[] LANGUAGE plpgsql STABLE SECURITY DEFINER'
+  'extension_drop__claim'
+  , ''
+  , 'TABLE(extension_name name, sql text) LANGUAGE plpgsql SECURITY DEFINER'
   , $body$
-DECLARE
-  ret name[] := array(
-    SELECT c.extension_name FROM @extension_schema@.extension_drop__commands c
-      WHERE c.extension_name = ANY(extension_names) ORDER BY 1
-  );
 BEGIN
-  -- With nothing registered the trigger returns without reaching its own sanity assert, so check here.
-  IF array_length(ret, 1) IS NULL THEN
-    PERFORM @extension_schema@.extension_drop__sanity_assert(NULL::name);
-  END IF;
-  RETURN ret;
+  -- RETURNING has no ORDER BY, hence the CTE. Registered SQL runs in the order the command dropped the extensions.
+  RETURN QUERY
+    WITH del AS (
+      DELETE FROM @extension_schema@.extension_drop__commands c
+        USING pg_event_trigger_dropped_objects() WITH ORDINALITY d
+        WHERE c.extension_name = d.object_name AND d.object_type = 'extension'
+        RETURNING c.extension_name, c.sql, d.ordinality AS ord
+    )
+    SELECT del.extension_name, del.sql FROM del ORDER BY del.ord;
+
+  PERFORM @extension_schema@.extension_drop__sanity_assert(NULL::name);
 END
 $body$
-  , $$Returns the given extensions that have drop commands, after asserting the table is sane if there are none.$$
+  , $$Deletes and returns the registrations (extension_name, sql) of the extensions being dropped, in drop order, after asserting the table is sane. Only works inside the extension_drop event trigger.$$
   , 'public'
 );
 
@@ -313,96 +332,26 @@ SELECT __extension_drop.create_function(
   , 'event_trigger LANGUAGE plpgsql'
   , $body$
 DECLARE
-  t record;
-  dropping text;
-  dropped name[];
-  registered name[];
-  names text[];
-  cmds text[];
-  i int;
-  msg text;
+  r record;
 BEGIN
   RAISE DEBUG 'extension_drop event trigger entry: tg_event %, tg_tag %', tg_event, tg_tag;
 
-  -- Most drops involve no extension; don't touch our table (or assert) for them.
-  SELECT string_agg(
-          format('"%s"', replace(object_name, '"', '""')), ', ' ORDER BY object_name)
-      , array_agg(object_name::name ORDER BY object_name)
-    INTO dropping, dropped
-    FROM pg_event_trigger_dropped_objects()
-    WHERE object_type = 'extension';
-  IF dropping IS NULL THEN
+  -- Most drops involve no extension; don't call the claim function (and its assert) for them.
+  IF NOT EXISTS (SELECT 1 FROM pg_event_trigger_dropped_objects() WHERE object_type = 'extension') THEN
     RETURN;
   END IF;
-
-  /*
-   * Callers without table access can still drop unregistered extensions. If the helper isn't executable,
-   * fall through to the DELETE below for its clearer error.
-   */
-  BEGIN
-    registered := @extension_schema@.extension_drop__registered(dropped);
-  EXCEPTION WHEN insufficient_privilege THEN
-    registered := NULL;
-  END;
-  IF registered IS NOT NULL AND array_length(registered, 1) IS NULL THEN
-    RETURN;
-  END IF;
-
-  /*
-   * One statement touches the table, so a privilege error here is ours; registered SQL runs after the
-   * handler so its own errors pass through untouched.
-   */
-  BEGIN
-    WITH del AS (
-      DELETE FROM @extension_schema@.extension_drop__commands c
-        USING pg_event_trigger_dropped_objects() d
-        WHERE c.extension_name = d.object_name AND d.object_type = 'extension'
-        RETURNING c.extension_name, c.sql
-    )
-    SELECT array_agg(extension_name), array_agg(sql) INTO names, cmds FROM del;
-  EXCEPTION WHEN insufficient_privilege THEN
-    GET STACKED DIAGNOSTICS msg = MESSAGE_TEXT;
-
-    -- Names are always double-quoted (embedded quotes doubled) in the primary message.
-    SELECT o.owner
-        , (SELECT array_agg(format('"%s"', replace(u.x, '"', '""')) ORDER BY u.ord)
-            FROM unnest(ARRAY[n.nspname::text, c.relname::text, o.owner::text]) WITH ORDINALITY u(x, ord)
-          ) AS dq -- schema, table, owner
-      INTO t
-      FROM pg_extension e
-        JOIN pg_class c
-          ON c.relnamespace = e.extnamespace AND c.relname = 'extension_drop__commands'
-        JOIN pg_namespace n ON n.oid = c.relnamespace
-        CROSS JOIN LATERAL (SELECT pg_get_userbyid(c.relowner) AS owner) o
-      WHERE e.extname = 'extension_drop';
-    IF NOT FOUND THEN
-      RAISE;
-    END IF;
-
-    RAISE EXCEPTION 'permission denied for table %.% (owned by role %), which extension_drop needs to drop extension(s) %'
-        , t.dq[1], t.dq[2], t.dq[3], dropping
-      USING ERRCODE = 'insufficient_privilege'
-        , DETAIL = msg
-        , HINT = format('Run the drop as role %s or a superuser.', quote_ident(t.owner));
-  END;
 
   /*
    * Registered SQL runs with path pg_catalog, <our schema>, pg_temp. The pin is restored right after so
    * the rest of this function never sees our schema (the function-exit restore covers an error).
    */
-  FOR i IN 1 .. COALESCE(array_length(cmds, 1), 0) LOOP
-    RAISE DEBUG E'extension "%" is being dropped; executing SQL:\n%', names[i], cmds[i];
+  FOR r IN SELECT * FROM @extension_schema@.extension_drop__claim() LOOP
+    RAISE DEBUG E'extension "%" is being dropped; executing SQL:\n%', r.extension_name, r.sql;
     PERFORM set_config('search_path', format('pg_catalog, %s, pg_temp', @extension_schema_literal@), true);
-    EXECUTE cmds[i];
+    EXECUTE r.sql;
     -- qualified: registered SQL may have changed search_path; don't unqualify
     PERFORM pg_catalog.set_config('search_path', 'pg_catalog, pg_temp', true);
   END LOOP;
-
-  /*
-   * Need to do this after the fact since the extensions being dropped have
-   * already been removed from the catalog by the time this function is called.
-   */
-  PERFORM @extension_schema@.extension_drop__sanity_assert(NULL::name);
 END
 $body$
   , 'Event trigger function that does the actual work for extension_drop.'
@@ -429,18 +378,20 @@ SELECT __extension_drop.create_function(
 DECLARE
   ns oid := (SELECT e.extnamespace FROM pg_extension e WHERE e.extname = 'extension_drop');
   nsname text;
+  detail text := 'extension_drop requires PUBLIC to have USAGE on the schema it is installed in. DDL command: ' || tg_tag;
 BEGIN
   -- Not installed any more (e.g. DROP OWNED dropped it): nothing to protect.
   IF ns IS NOT NULL AND NOT has_schema_privilege('public', ns, 'USAGE') THEN
-    nsname := (SELECT quote_ident(n.nspname) FROM pg_namespace n WHERE n.oid = ns);
+    nsname := (SELECT n.nspname FROM pg_namespace n WHERE n.oid = ns);
     IF tg_event = 'ddl_command_start' THEN
-      RAISE EXCEPTION 'PUBLIC lacks USAGE on schema %, which extension_drop requires', nsname
+      RAISE EXCEPTION 'PUBLIC lacks USAGE on schema "%"', replace(nsname, '"', '""')
         USING ERRCODE = 'object_not_in_prerequisite_state'
-          , HINT = format('Run GRANT USAGE ON SCHEMA %s TO PUBLIC. extension_drop resolves extension_drop__registered() as whichever role drops an extension, which needs USAGE on the schema.', nsname);
+          , DETAIL = detail
+          , HINT = format('Run GRANT USAGE ON SCHEMA %s TO PUBLIC.', quote_ident(nsname));
     END IF;
-    RAISE EXCEPTION 'Command would remove PUBLIC''s USAGE on schema %, which extension_drop requires', nsname
+    RAISE EXCEPTION 'cannot remove USAGE on schema "%" from PUBLIC', replace(nsname, '"', '""')
       USING ERRCODE = 'object_not_in_prerequisite_state'
-        , DETAIL = format('DDL command: %s', tg_tag);
+        , DETAIL = detail;
   END IF;
 END
 $body$

@@ -2,29 +2,28 @@
 \i test/pgxntool/setup.sql
 
 /*
- * Dropping an extension that is registered with extension_drop needs access to
- * extension_drop's registration table; without it the caller must get an actionable
- * insufficient_privilege error, not a raw "permission denied for table". Dropping an
- * unregistered extension needs no table privileges, but a stale registration still fails.
- * Covers the three commands the trigger fires for.
+ * A role that can drop an extension needs no privileges on extension_drop's registration table, whether or
+ * not the extension is registered; registered SQL runs as the dropping role; a stale registration still
+ * raises XD001. Covers the three commands the trigger fires for. Every scenario runs between
+ * ROLLBACK TO SAVEPOINT base, which this file's transaction makes possible.
  */
 SELECT plan(
-  2 -- Setup: role, schema with extension
-  + 4 -- No table privileges: the error, then its DETAIL and HINT
-  + 2 -- SELECT but not DELETE
-  + 2 -- SELECT and DELETE, registered SQL fails with its own privilege error
-  + 4 -- SELECT and DELETE, registered SQL succeeds
-  + 1 -- Registration removed
-  + 4 -- The same privileges held through a group role
-  + 3 -- Unregistered, no table privileges: recreate, unregister, DROP SCHEMA CASCADE
-  + 3 -- Unregistered, no table privileges: DROP OWNED BY
-  + 5 -- Unregistered, SELECT but not DELETE
-  + 6 -- Helper not executable: falls through to the caller's DELETE
-  + 23 -- Pinned search_path; planted operators in extension_drop's schema are not run by the helper or by a superuser's drops
-  + 4 -- Temp table shadowing extension_drop__commands
-  + 6 -- Stale registration
-  + 4 -- DROP EXTENSION by a role that was a superuser when it created it
-  + 2 -- DROP EXTENSION of an unregistered extension by that role
+  1 -- Setup: role
+  + 1 -- Setup: schema with registered extension
+  + 1 -- Setup: registered SQL records current_user
+  + 1 -- The role holds no table privileges
+  + 3 -- Registered: DROP SCHEMA CASCADE
+  + 3 -- Registered: DROP OWNED BY
+  + 1 -- Unregistered: DROP SCHEMA CASCADE
+  + 1 -- Unregistered: DROP OWNED BY
+  + 5 -- DROP EXTENSION by the extension's non-superuser owner, registered and not
+  + 2 -- Registered SQL fails with its own privilege error
+  + 2 -- Stale registration: registered and unregistered
+  + 3 -- Calling extension_drop__claim outside the event trigger
+  + 3 -- Temp table shadowing extension_drop__commands
+  + 3 -- Member functions: count, pins, SECURITY DEFINER
+  + 6 -- Planted operators: claim path as a role, claim path with a stale row
+  + 4 -- Planted operators: invoker paths run by a superuser
   + 1 -- extension_drop's schema should not be on search_path (test/finish.sql)
 );
 
@@ -33,16 +32,20 @@ SET client_min_messages = ERROR;
 
 \set DROP_SCHEMA 'DO $$ BEGIN SET LOCAL ROLE extension_drop_test_plain; DROP SCHEMA extension_drop_test_plain_schema CASCADE; RESET ROLE; END $$'
 \set DROP_OWNED 'DO $$ BEGIN SET LOCAL ROLE extension_drop_test_plain; DROP OWNED BY extension_drop_test_plain CASCADE; RESET ROLE; END $$'
+\set DROP_EXTENSION 'DO $$ BEGIN SET LOCAL ROLE extension_drop_test_owner; DROP EXTENSION extension_drop_test; RESET ROLE; END $$'
 \set RECREATE 'CREATE SCHEMA extension_drop_test_plain_schema AUTHORIZATION extension_drop_test_plain; CREATE EXTENSION extension_drop_test SCHEMA extension_drop_test_plain_schema'
 \set UNREGISTER 'SELECT ' :"extension_drop_schema" '.extension_drop__remove(''extension_drop_test'')'
-\set UNREGISTER_SU 'CREATE EXTENSION extension_drop_test; ' :UNREGISTER
 
--- The primary message names the table, its owner and the extensions being dropped
-SELECT format(
-  'permission denied for table "%s"."extension_drop__commands" (owned by role "%s"), which extension_drop needs to drop extension(s) "extension_drop_test"'
-  , :'extension_drop_schema'
-  , (SELECT pg_get_userbyid(relowner) FROM pg_class WHERE oid = format('%I.extension_drop__commands', :'extension_drop_schema')::regclass)
-) AS "MSG" \gset
+-- The registered SQL, as the three statements the tests below need it in
+SELECT format($$SELECT %I.extension_drop__update('extension_drop_test', %L)$$
+    , :'extension_drop_schema', $s$SELECT set_config('extension_drop_test.ran_as', current_user, false)$s$) AS "RECORD_ROLE" \gset
+SELECT format($$SELECT %I.extension_drop__update('extension_drop_test', 'CREATE ROLE extension_drop_test_never')$$
+    , :'extension_drop_schema') AS "NEEDS_CREATEROLE" \gset
+SELECT format($$INSERT INTO %I.extension_drop__commands VALUES('extension_drop_test_stale', 'SELECT 1')$$
+    , :'extension_drop_schema') AS "INSERT_STALE" \gset
+SELECT format('SELECT count(*)::int FROM %I.extension_drop__commands', :'extension_drop_schema') AS "COUNT_REGISTERED" \gset
+
+DO $$ BEGIN PERFORM set_config('extension_drop_test.ran_as', 'none', false); END $$;
 
 SELECT lives_ok(
   'CREATE ROLE extension_drop_test_plain'
@@ -53,56 +56,95 @@ SELECT lives_ok(
   :'RECREATE'
   , 'Create schema owned by role containing a registered extension'
 );
+SELECT lives_ok(
+  :'RECORD_ROLE'
+  , 'Register SQL that records current_user'
+);
+SELECT is(
+  (SELECT bool_or(has_table_privilege('extension_drop_test_plain', c.oid, p))
+    FROM pg_class c, unnest('{SELECT,INSERT,UPDATE,DELETE}'::text[]) p
+    WHERE c.oid = format('%I.extension_drop__commands', :'extension_drop_schema')::regclass)
+  , false
+  , 'The role has no privileges on extension_drop__commands'
+);
 
-SELECT throws_ok(
+SAVEPOINT base;
+
+-- Registered: the SQL runs as the dropping role and the registration is gone
+SELECT lives_ok(
   :'DROP_SCHEMA'
-  , '42501'
-  , :'MSG'
   , 'Registered: DROP SCHEMA CASCADE with no table privileges'
 );
+SELECT is(
+  current_setting('extension_drop_test.ran_as')
+  , 'extension_drop_test_plain'
+  , 'Registered SQL ran as the dropping role'
+);
+SELECT is_empty(
+  format($$SELECT 1 FROM %I.extension_drop__commands$$, :'extension_drop_schema')
+  , 'Registration removed'
+);
+ROLLBACK TO SAVEPOINT base;
 
--- The error text reaches the caller as DETAIL and HINT; stash them in GUCs to compare
 SELECT lives_ok(
-  $q$DO $$
-  DECLARE d text; h text;
-  BEGIN
-    SET LOCAL ROLE extension_drop_test_plain;
-    DROP SCHEMA extension_drop_test_plain_schema CASCADE;
-  EXCEPTION WHEN insufficient_privilege THEN
-    GET STACKED DIAGNOSTICS d = PG_EXCEPTION_DETAIL, h = PG_EXCEPTION_HINT;
-    PERFORM set_config('extension_drop_test.detail', d, false), set_config('extension_drop_test.hint', h, false);
-  END $$$q$
-  , 'Capture DETAIL and HINT'
+  :'DROP_OWNED'
+  , 'Registered: DROP OWNED BY with no table privileges'
 );
 SELECT is(
-  current_setting('extension_drop_test.detail')
-  , 'permission denied for table extension_drop__commands'
-  , 'DETAIL is the original error'
+  current_setting('extension_drop_test.ran_as')
+  , 'extension_drop_test_plain'
+  , 'Registered SQL ran as the dropping role'
+);
+SELECT is_empty(
+  format($$SELECT 1 FROM %I.extension_drop__commands$$, :'extension_drop_schema')
+  , 'Registration removed'
+);
+ROLLBACK TO SAVEPOINT base;
+
+-- Unregistered
+SELECT lives_ok(
+  :'UNREGISTER' || '; ' || :'DROP_SCHEMA'
+  , 'Unregistered: DROP SCHEMA CASCADE with no table privileges'
+);
+ROLLBACK TO SAVEPOINT base;
+SELECT lives_ok(
+  :'UNREGISTER' || '; ' || :'DROP_OWNED'
+  , 'Unregistered: DROP OWNED BY with no table privileges'
+);
+ROLLBACK TO SAVEPOINT base;
+
+-- DROP EXTENSION needs the extension's owner; create it as a role that is then demoted
+DROP SCHEMA extension_drop_test_plain_schema CASCADE;
+CREATE ROLE extension_drop_test_owner SUPERUSER;
+SELECT lives_ok(
+  $q$DO $$ BEGIN SET LOCAL ROLE extension_drop_test_owner; CREATE EXTENSION extension_drop_test; RESET ROLE; END $$$q$
+  , 'Create registered test extension as role'
+);
+SELECT lives_ok(
+  :'RECORD_ROLE' || '; ALTER ROLE extension_drop_test_owner NOSUPERUSER'
+  , 'Register the recording SQL and demote the role'
+);
+SAVEPOINT owned;
+SELECT lives_ok(
+  :'DROP_EXTENSION'
+  , 'Registered: DROP EXTENSION by the extension''s non-superuser owner with no table privileges'
 );
 SELECT is(
-  current_setting('extension_drop_test.hint')
-  , format('Run the drop as role %I or a superuser.', current_user)
-  , 'HINT'
+  current_setting('extension_drop_test.ran_as')
+  , 'extension_drop_test_owner'
+  , 'Registered SQL ran as the dropping role'
 );
-
--- SELECT alone is not enough for a registered extension: the trigger deletes the registration
+ROLLBACK TO SAVEPOINT owned;
 SELECT lives_ok(
-  format('GRANT SELECT ON %I.extension_drop__commands TO extension_drop_test_plain', :'extension_drop_schema')
-  , 'Grant SELECT'
+  :'UNREGISTER' || '; ' || :'DROP_EXTENSION'
+  , 'Unregistered: DROP EXTENSION by the extension''s non-superuser owner with no table privileges'
 );
-SELECT throws_ok(
-  :'DROP_SCHEMA'
-  , '42501'
-  , :'MSG'
-  , 'Registered: DROP SCHEMA CASCADE with SELECT but not DELETE'
-);
+ROLLBACK TO SAVEPOINT base;
 
--- A privilege error from the registered SQL itself is not extension_drop's to translate
+-- A privilege error from the registered SQL itself surfaces unchanged
 SELECT lives_ok(
-  format($$GRANT DELETE ON %1$I.extension_drop__commands TO extension_drop_test_plain;
-           SELECT %1$I.extension_drop__update('extension_drop_test', 'CREATE ROLE extension_drop_test_never')$$
-    , :'extension_drop_schema')
-  , 'Grant DELETE, register SQL that needs CREATEROLE'
+  :'NEEDS_CREATEROLE'
+  , 'Register SQL that needs CREATEROLE'
 );
 SELECT throws_ok(
   :'DROP_SCHEMA'
@@ -110,128 +152,68 @@ SELECT throws_ok(
   , 'permission denied to create role'
   , 'Registered SQL''s own privilege error surfaces unchanged'
 );
+ROLLBACK TO SAVEPOINT base;
 
-SELECT lives_ok(
-  format($$SELECT %I.extension_drop__update('extension_drop_test', 'SELECT 1')$$, :'extension_drop_schema')
-  , 'Register harmless SQL'
+-- A stale registration fails the drop whether or not the extension is registered
+SELECT throws_ok(
+  :'INSERT_STALE' || '; ' || :'DROP_SCHEMA'
+  , 'XD001'
+  , 'unexpected drop commands'
+  , 'Registered: DROP SCHEMA CASCADE with a stale registration present'
 );
-SELECT lives_ok(
-  :'DROP_SCHEMA'
-  , 'Registered: DROP SCHEMA CASCADE with SELECT and DELETE granted'
+ROLLBACK TO SAVEPOINT base;
+SELECT throws_ok(
+  :'UNREGISTER' || '; ' || :'INSERT_STALE' || '; ' || :'DROP_SCHEMA'
+  , 'XD001'
+  , 'unexpected drop commands'
+  , 'Unregistered: DROP SCHEMA CASCADE with a stale registration present'
 );
-SELECT is_empty(
-  format($$SELECT unnest(%I.extension_drop__sanity_check())$$, :'extension_drop_schema')
-  , 'No stale registration'
-);
-SELECT is_empty(
-  format($$SELECT 1 FROM %I.extension_drop__commands WHERE extension_name = 'extension_drop_test'$$, :'extension_drop_schema')
-  , 'Registration removed'
-);
+ROLLBACK TO SAVEPOINT base;
 
--- Privileges held only through a group role the caller is a member of
-SELECT lives_ok(
-  :'RECREATE'
-  , 'Recreate the registered extension'
-);
-SELECT lives_ok(
-  format(
-    $$SELECT %1$I.extension_drop__update('extension_drop_test', 'SELECT 1');
-      REVOKE SELECT, DELETE ON %1$I.extension_drop__commands FROM extension_drop_test_plain;
-      CREATE ROLE extension_drop_test_group;
-      GRANT SELECT, DELETE ON %1$I.extension_drop__commands TO extension_drop_test_group;
-      GRANT extension_drop_test_group TO extension_drop_test_plain$$
-    , :'extension_drop_schema')
-  , 'Move the grants from the role to a group it belongs to'
-);
-SELECT lives_ok(
-  :'DROP_SCHEMA'
-  , 'Registered: DROP SCHEMA CASCADE with the privileges held through a group role'
-);
-SELECT lives_ok(
-  'REVOKE extension_drop_test_group FROM extension_drop_test_plain'
-  , 'Remove all of the role''s access'
-);
-
--- Unregistered extensions need no table privileges
-SELECT lives_ok(
-  :'RECREATE'
-  , 'Recreate the extension'
-);
-SELECT lives_ok(
-  :'UNREGISTER'
-  , 'Unregister the extension'
-);
-SELECT lives_ok(
-  :'DROP_SCHEMA'
-  , 'Unregistered: DROP SCHEMA CASCADE with no table privileges'
-);
-
-SELECT lives_ok(
-  :'RECREATE'
-  , 'Recreate the extension'
-);
-SELECT lives_ok(
-  :'UNREGISTER'
-  , 'Unregister the extension'
-);
-SELECT lives_ok(
-  :'DROP_OWNED'
-  , 'Unregistered: DROP OWNED BY with no table privileges'
-);
-
-SELECT lives_ok(
-  :'RECREATE'
-  , 'Recreate the extension'
-);
-SELECT lives_ok(
-  :'UNREGISTER'
-  , 'Unregister the extension'
-);
-SELECT lives_ok(
-  format('GRANT SELECT ON %I.extension_drop__commands TO extension_drop_test_plain', :'extension_drop_schema')
-  , 'Grant SELECT'
-);
-SELECT lives_ok(
-  :'DROP_SCHEMA'
-  , 'Unregistered: DROP SCHEMA CASCADE with SELECT but not DELETE'
-);
-SELECT lives_ok(
-  format('REVOKE SELECT ON %I.extension_drop__commands FROM extension_drop_test_plain', :'extension_drop_schema')
-  , 'Revoke SELECT'
-);
-
--- With EXECUTE on the helper revoked, the trigger falls through to the caller's own DELETE
-SELECT lives_ok(
-  :'RECREATE'
-  , 'Recreate the extension'
-);
-SELECT lives_ok(
-  :'UNREGISTER'
-  , 'Unregister the extension'
-);
-SELECT lives_ok(
-  format('REVOKE EXECUTE ON FUNCTION %I.extension_drop__registered(name[]) FROM PUBLIC', :'extension_drop_schema')
-  , 'Revoke EXECUTE on the helper'
+-- Called directly, claim must delete nothing: pg_event_trigger_dropped_objects() refuses outside the trigger
+SELECT throws_ok(
+  format('SELECT * FROM %I.extension_drop__claim()', :'extension_drop_schema')
+  , '39P03'
+  , 'pg_event_trigger_dropped_objects() can only be called in a sql_drop event trigger function'
+  , 'extension_drop__claim outside the event trigger fails'
 );
 SELECT throws_ok(
-  :'DROP_SCHEMA'
-  , '42501'
-  , :'MSG'
-  , 'Unregistered: DROP SCHEMA CASCADE without EXECUTE on the helper or table privileges'
+  format('DO $$ BEGIN SET LOCAL ROLE extension_drop_test_plain; PERFORM %I.extension_drop__claim(); END $$', :'extension_drop_schema')
+  , '39P03'
+  , 'pg_event_trigger_dropped_objects() can only be called in a sql_drop event trigger function'
+  , 'extension_drop__claim outside the event trigger fails for a plain role'
 );
-SELECT lives_ok(
-  format('GRANT EXECUTE ON FUNCTION %I.extension_drop__registered(name[]) TO PUBLIC', :'extension_drop_schema')
-  , 'Restore EXECUTE on the helper'
-);
-SELECT lives_ok(
-  'DROP SCHEMA extension_drop_test_plain_schema CASCADE'
-  , 'Superuser drop schema'
+SELECT is(
+  (:COUNT_REGISTERED)
+  , 1
+  , 'The extension is still registered'
 );
 
+-- A temp table named like ours must not hide the real registration from claim
+SELECT lives_ok(
+  $q$DO $$
+  BEGIN
+    SET LOCAL ROLE extension_drop_test_plain;
+    CREATE TEMP TABLE extension_drop__commands(extension_name name, sql text);
+    DROP SCHEMA extension_drop_test_plain_schema CASCADE;
+    RESET ROLE;
+  END $$$q$
+  , 'DROP SCHEMA CASCADE by a role that has a temp table of the same name'
+);
+SELECT is(
+  current_setting('extension_drop_test.ran_as')
+  , 'extension_drop_test_plain'
+  , 'The registered SQL still ran'
+);
+SELECT is_empty(
+  format($$SELECT 1 FROM %I.extension_drop__commands$$, :'extension_drop_schema')
+  , 'The real registration was removed'
+);
+ROLLBACK TO SAVEPOINT base;
+
 /*
- * A role with CREATE on extension_drop's schema must not be able to run code as anyone who calls into it.
- * The planted operators are on the types the functions actually compare (name, name) and (name, text);
- * an exact match in the schema beats pg_catalog's for any function whose path puts the schema first.
+ * Every function runs with a pinned search_path, and only extension_drop__claim is SECURITY DEFINER (so
+ * the event trigger, and everything it runs, is the dropping role's own).
  */
 SELECT is(
   (SELECT count(*)::int FROM pg_depend d
@@ -248,12 +230,21 @@ SELECT is(
   , 0
   , 'Every extension_drop function pins search_path to pg_catalog, pg_temp'
 );
-SELECT lives_ok(
-  format('GRANT CREATE ON SCHEMA %I TO extension_drop_test_plain', :'extension_drop_schema')
-  , 'Grant CREATE on extension_drop''s schema'
+SELECT is(
+  (SELECT array_agg(p.proname::text ORDER BY p.proname) FROM pg_depend d JOIN pg_proc p ON p.oid = d.objid
+    WHERE d.classid = 'pg_proc'::regclass AND d.refclassid = 'pg_extension'::regclass AND d.deptype = 'e'
+      AND d.refobjid = (SELECT e.oid FROM pg_extension e WHERE e.extname = 'extension_drop')
+      AND p.prosecdef)
+  , ARRAY['extension_drop__claim']
+  , 'Only extension_drop__claim is SECURITY DEFINER'
 );
-SELECT lives_ok(
-  format($q$DO $d$
+
+/*
+ * A role with CREATE on extension_drop's schema must not be able to run code as anyone who calls into it.
+ * The planted operators are on the types the functions actually compare (name, name) and (name, text);
+ * an exact match in the schema beats pg_catalog's for any function whose path puts the schema first.
+ */
+SELECT format($q$DO $d$
   BEGIN
     SET LOCAL ROLE extension_drop_test_plain;
     CREATE FUNCTION %1$I.xd_test_hijack(name, name) RETURNS boolean LANGUAGE plpgsql AS
@@ -265,203 +256,60 @@ SELECT lives_ok(
     CREATE OPERATOR %1$I.<> (LEFTARG = name, RIGHTARG = name, FUNCTION = %1$I.xd_test_hijack(name, name));
     CREATE OPERATOR %1$I.<> (LEFTARG = name, RIGHTARG = text, FUNCTION = %1$I.xd_test_hijack(name, text));
     RESET ROLE;
-  END $d$$q$, :'extension_drop_schema')
-  , 'Plant = and <> operators on (name, name) and (name, text) in extension_drop''s schema'
-);
-SELECT lives_ok(
-  $$SELECT set_config('extension_drop_test.hijacked', 'no', false)$$
-  , 'Reset the flag'
-);
-SELECT lives_ok(
-  format($q$DO $d$
-  BEGIN
-    SET LOCAL ROLE extension_drop_test_plain;
-    PERFORM %I.extension_drop__registered('{}');
-    RESET ROLE;
-  END $d$$q$, :'extension_drop_schema')
-  , 'Call the helper as that role'
-);
-SELECT is(
-  current_setting('extension_drop_test.hijacked')
-  , 'no'
-  , 'The helper did not run the planted operators'
-);
+  END $d$$q$, :'extension_drop_schema') AS "PLANT" \gset
+SELECT format('GRANT CREATE ON SCHEMA %I TO extension_drop_test_plain', :'extension_drop_schema') AS "GRANT_CREATE" \gset
 
--- With a stale row present the helper runs sanity_assert as the owner; the planted operators still must not run
 SELECT lives_ok(
-  format($$INSERT INTO %I.extension_drop__commands VALUES('extension_drop_test_stale', 'SELECT 1')$$, :'extension_drop_schema')
-  , 'Insert a stale registration'
+  :'GRANT_CREATE' || '; ' || :'PLANT' || $$; SELECT set_config('extension_drop_test.hijacked', 'no', false)$$
+  , 'Grant CREATE on extension_drop''s schema and plant = and <> operators on (name, name) and (name, text)'
 );
 SELECT lives_ok(
-  format($q$DO $d$
-  DECLARE m text; d text; h text;
-  BEGIN
-    SET LOCAL ROLE extension_drop_test_plain;
-    PERFORM %I.extension_drop__registered('{}');
-    RESET ROLE;
-  EXCEPTION WHEN sqlstate 'XD001' THEN
-    GET STACKED DIAGNOSTICS m = MESSAGE_TEXT, d = PG_EXCEPTION_DETAIL, h = PG_EXCEPTION_HINT;
-    PERFORM set_config('extension_drop_test.helper_text', concat_ws('|', m, d, h), false);
-  END $d$$q$, :'extension_drop_schema')
-  , 'Call the helper as that role with a stale row: XD001'
-);
-SELECT lives_ok(
-  format($q$DO $d$
-  DECLARE m text; d text; h text;
-  BEGIN
-    PERFORM * FROM %I.extension_drop__get('extension_drop_test_other');
-  EXCEPTION WHEN sqlstate 'XD001' THEN
-    GET STACKED DIAGNOSTICS m = MESSAGE_TEXT, d = PG_EXCEPTION_DETAIL, h = PG_EXCEPTION_HINT;
-    PERFORM set_config('extension_drop_test.get_text', concat_ws('|', m, d, h), false);
-  END $d$$q$, :'extension_drop_schema')
-  , 'Call extension_drop__get as superuser with a stale row: XD001'
+  :'DROP_SCHEMA'
+  , 'Registered: DROP SCHEMA CASCADE by the role with the operators planted'
 );
 SELECT is(
   current_setting('extension_drop_test.hijacked')
   , 'no'
-  , 'Neither the helper (as owner) nor sanity_assert (as superuser) ran the planted operators'
+  , 'The claim function did not run the planted operators'
 );
-SELECT is(
-  current_setting('extension_drop_test.helper_text')
-  , E'unexpected drop commands|This extension does not exist: extension_drop_test_stale|This should not happen unless someone manually inserted into "extension_drop__commands" or messed with the "extension_drop" event trigger.\n  Use SELECT extension_drop__repair() to fix this.'
-  , 'The helper raises XD001 with the usual message, DETAIL and HINT'
-);
-SELECT is(
-  current_setting('extension_drop_test.helper_text')
-  , current_setting('extension_drop_test.get_text')
-  , 'extension_drop__get raises the identical XD001'
-);
+ROLLBACK TO SAVEPOINT base;
+
+-- With a stale row claim runs sanity_assert as the owner; the planted operators still must not run
 SELECT lives_ok(
-  format($$DELETE FROM %I.extension_drop__commands WHERE extension_name = 'extension_drop_test_stale'$$, :'extension_drop_schema')
-  , 'Remove the stale registration'
+  :'GRANT_CREATE' || '; ' || :'PLANT' || '; ' || :'INSERT_STALE' || $$; SELECT set_config('extension_drop_test.hijacked', 'no', false)$$
+  , 'Plant the operators and insert a stale registration'
+);
+SELECT throws_ok(
+  :'DROP_SCHEMA'
+  , 'XD001'
+  , 'unexpected drop commands'
+  , 'DROP SCHEMA CASCADE with a stale registration: XD001'
+);
+SELECT is(
+  current_setting('extension_drop_test.hijacked')
+  , 'no'
+  , 'Neither the claim function (as owner) nor sanity_assert (as owner) ran the planted operators'
 );
 
 -- The invoker paths run with the caller's own rights, so a superuser is the interesting caller
 SELECT lives_ok(
-  $$CREATE EXTENSION extension_drop_test$$
-  , 'Create a registered extension'
+  format($$DELETE FROM %I.extension_drop__commands WHERE extension_name = 'extension_drop_test_stale'$$, :'extension_drop_schema')
+  , 'Remove the stale registration'
 );
 SELECT lives_ok(
   format($$SELECT * FROM %I.extension_drop__get('extension_drop_test')$$, :'extension_drop_schema')
   , 'extension_drop__get as superuser, which runs sanity_assert'
 );
 SELECT lives_ok(
-  $$DROP EXTENSION extension_drop_test$$
-  , 'Superuser DROP EXTENSION of a registered extension'
+  'DROP SCHEMA extension_drop_test_plain_schema CASCADE'
+  , 'Superuser drop of a registered extension, which runs the event trigger'
 );
 SELECT is(
   current_setting('extension_drop_test.hijacked')
   , 'no'
-  , 'The registered and get paths did not run the planted operators'
+  , 'The invoker paths did not run the planted operators'
 );
-SELECT lives_ok(
-  :'UNREGISTER_SU'
-  , 'Create an extension and unregister it'
-);
-SELECT lives_ok(
-  $$DROP EXTENSION extension_drop_test$$
-  , 'Superuser DROP EXTENSION of an unregistered extension'
-);
-SELECT is(
-  current_setting('extension_drop_test.hijacked')
-  , 'no'
-  , 'The unregistered path did not run the planted operators'
-);
-
-SELECT lives_ok(
-  format('DROP OPERATOR %1$I.=(name, name); DROP OPERATOR %1$I.=(name, text); DROP OPERATOR %1$I.<>(name, name); DROP OPERATOR %1$I.<>(name, text); DROP FUNCTION %1$I.xd_test_hijack(name, name); DROP FUNCTION %1$I.xd_test_hijack(name, text)', :'extension_drop_schema')
-  , 'Remove the planted operators'
-);
-SELECT lives_ok(
-  format('REVOKE CREATE ON SCHEMA %I FROM extension_drop_test_plain', :'extension_drop_schema')
-  , 'Revoke CREATE'
-);
-
--- A temp table named like ours must not hide the real registration from the helper
-SELECT lives_ok(
-  :'RECREATE'
-  , 'Recreate the registered extension'
-);
-SELECT throws_ok(
-  $q$DO $$
-  BEGIN
-    SET LOCAL ROLE extension_drop_test_plain;
-    CREATE TEMP TABLE extension_drop__commands(extension_name name, sql text);
-    DROP SCHEMA extension_drop_test_plain_schema CASCADE;
-  END $$$q$
-  , '42501'
-  , :'MSG'
-  , 'Registered extension is still found when the caller has a temp table of the same name'
-);
-SELECT lives_ok(
-  :'UNREGISTER'
-  , 'Unregister the extension'
-);
-SELECT lives_ok(
-  'DROP SCHEMA extension_drop_test_plain_schema CASCADE'
-  , 'Superuser drop schema'
-);
-
--- A stale registration must still fail the drop of an unregistered extension
-SELECT lives_ok(
-  :'RECREATE'
-  , 'Recreate the extension'
-);
-SELECT lives_ok(
-  :'UNREGISTER'
-  , 'Unregister the extension'
-);
-SELECT lives_ok(
-  format($$INSERT INTO %I.extension_drop__commands VALUES('extension_drop_test_stale', 'SELECT 1')$$, :'extension_drop_schema')
-  , 'Insert a stale registration'
-);
-SELECT throws_ok(
-  :'DROP_SCHEMA'
-  , 'XD001'
-  , 'unexpected drop commands'
-  , 'Unregistered: DROP SCHEMA CASCADE with a stale registration present'
-);
-SELECT lives_ok(
-  format('SELECT %I.extension_drop__repair()', :'extension_drop_schema')
-  , 'Repair'
-);
-SELECT lives_ok(
-  'DROP SCHEMA extension_drop_test_plain_schema CASCADE'
-  , 'Superuser drop schema'
-);
-
--- ALTER EXTENSION can't change the owner, so create it as a role that is then demoted
-SELECT lives_ok(
-  'CREATE ROLE extension_drop_test_owner SUPERUSER'
-  , 'Create role'
-);
-SELECT lives_ok(
-  $q$DO $$ BEGIN SET LOCAL ROLE extension_drop_test_owner; CREATE EXTENSION extension_drop_test; RESET ROLE; END $$$q$
-  , 'Create test extension as role'
-);
-SELECT lives_ok(
-  'ALTER ROLE extension_drop_test_owner NOSUPERUSER'
-  , 'Demote role'
-);
-SELECT throws_ok(
-  $q$DO $$ BEGIN SET LOCAL ROLE extension_drop_test_owner; DROP EXTENSION extension_drop_test; END $$$q$
-  , '42501'
-  , :'MSG'
-  , 'DROP EXTENSION by the extension''s non-superuser owner'
-);
-
-SELECT lives_ok(
-  :'UNREGISTER'
-  , 'Unregister the extension'
-);
-SELECT lives_ok(
-  $q$DO $$ BEGIN SET LOCAL ROLE extension_drop_test_owner; DROP EXTENSION extension_drop_test; RESET ROLE; END $$$q$
-  , 'Unregistered: DROP EXTENSION by the extension''s non-superuser owner with no table privileges'
-);
-SELECT is_empty(
-  format($$SELECT unnest(%I.extension_drop__sanity_check())$$, :'extension_drop_schema')
-  , 'No stale registration'
-);
+ROLLBACK TO SAVEPOINT base;
 
 \i test/finish.sql
 

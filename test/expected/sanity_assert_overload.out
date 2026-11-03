@@ -1,10 +1,12 @@
 \set ECHO none
-1..7
+1..9
 ok 1 - Create a role with CREATE on extension_drop's schema
 ok 2 - Plant a zero-argument extension_drop__sanity_assert()
-ok 3 - extension_drop__registered() with nothing registered
-ok 4 - CREATE EXTENSION of an extension that registers drop commands
-ok 5 - extension_drop__get
-ok 6 - DROP EXTENSION runs the event trigger
-ok 7 - extension_drop's schema should not be reachable via search_path
+ok 3 - CREATE EXTENSION of an extension that registers drop commands
+ok 4 - extension_drop__get
+ok 5 - DROP EXTENSION runs the event trigger
+ok 6 - Create the extension again
+ok 7 - Unregister it
+ok 8 - DROP EXTENSION of an unregistered extension
+ok 9 - extension_drop's schema should not be reachable via search_path
 # TRANSACTION INTENTIONALLY LEFT OPEN!

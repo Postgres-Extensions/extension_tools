@@ -1,79 +1,44 @@
 \set ECHO none
-1..76
+1..41
 ok 1 - Create non-superuser role
 ok 2 - Create schema owned by role containing a registered extension
-ok 3 - Registered: DROP SCHEMA CASCADE with no table privileges
-ok 4 - Capture DETAIL and HINT
-ok 5 - DETAIL is the original error
-ok 6 - HINT
-ok 7 - Grant SELECT
-ok 8 - Registered: DROP SCHEMA CASCADE with SELECT but not DELETE
-ok 9 - Grant DELETE, register SQL that needs CREATEROLE
-ok 10 - Registered SQL's own privilege error surfaces unchanged
-ok 11 - Register harmless SQL
-ok 12 - Registered: DROP SCHEMA CASCADE with SELECT and DELETE granted
-ok 13 - No stale registration
-ok 14 - Registration removed
-ok 15 - Recreate the registered extension
-ok 16 - Move the grants from the role to a group it belongs to
-ok 17 - Registered: DROP SCHEMA CASCADE with the privileges held through a group role
-ok 18 - Remove all of the role's access
-ok 19 - Recreate the extension
-ok 20 - Unregister the extension
-ok 21 - Unregistered: DROP SCHEMA CASCADE with no table privileges
-ok 22 - Recreate the extension
-ok 23 - Unregister the extension
-ok 24 - Unregistered: DROP OWNED BY with no table privileges
-ok 25 - Recreate the extension
-ok 26 - Unregister the extension
-ok 27 - Grant SELECT
-ok 28 - Unregistered: DROP SCHEMA CASCADE with SELECT but not DELETE
-ok 29 - Revoke SELECT
-ok 30 - Recreate the extension
-ok 31 - Unregister the extension
-ok 32 - Revoke EXECUTE on the helper
-ok 33 - Unregistered: DROP SCHEMA CASCADE without EXECUTE on the helper or table privileges
-ok 34 - Restore EXECUTE on the helper
-ok 35 - Superuser drop schema
-ok 36 - extension_drop has the expected number of member functions
-ok 37 - Every extension_drop function pins search_path to pg_catalog, pg_temp
-ok 38 - Grant CREATE on extension_drop's schema
-ok 39 - Plant = and <> operators on (name, name) and (name, text) in extension_drop's schema
-ok 40 - Reset the flag
-ok 41 - Call the helper as that role
-ok 42 - The helper did not run the planted operators
-ok 43 - Insert a stale registration
-ok 44 - Call the helper as that role with a stale row: XD001
-ok 45 - Call extension_drop__get as superuser with a stale row: XD001
-ok 46 - Neither the helper (as owner) nor sanity_assert (as superuser) ran the planted operators
-ok 47 - The helper raises XD001 with the usual message, DETAIL and HINT
-ok 48 - extension_drop__get raises the identical XD001
-ok 49 - Remove the stale registration
-ok 50 - Create a registered extension
-ok 51 - extension_drop__get as superuser, which runs sanity_assert
-ok 52 - Superuser DROP EXTENSION of a registered extension
-ok 53 - The registered and get paths did not run the planted operators
-ok 54 - Create an extension and unregister it
-ok 55 - Superuser DROP EXTENSION of an unregistered extension
-ok 56 - The unregistered path did not run the planted operators
-ok 57 - Remove the planted operators
-ok 58 - Revoke CREATE
-ok 59 - Recreate the registered extension
-ok 60 - Registered extension is still found when the caller has a temp table of the same name
-ok 61 - Unregister the extension
-ok 62 - Superuser drop schema
-ok 63 - Recreate the extension
-ok 64 - Unregister the extension
-ok 65 - Insert a stale registration
-ok 66 - Unregistered: DROP SCHEMA CASCADE with a stale registration present
-ok 67 - Repair
-ok 68 - Superuser drop schema
-ok 69 - Create role
-ok 70 - Create test extension as role
-ok 71 - Demote role
-ok 72 - DROP EXTENSION by the extension's non-superuser owner
-ok 73 - Unregister the extension
-ok 74 - Unregistered: DROP EXTENSION by the extension's non-superuser owner with no table privileges
-ok 75 - No stale registration
-ok 76 - extension_drop's schema should not be reachable via search_path
+ok 3 - Register SQL that records current_user
+ok 4 - The role has no privileges on extension_drop__commands
+ok 5 - Registered: DROP SCHEMA CASCADE with no table privileges
+ok 6 - Registered SQL ran as the dropping role
+ok 7 - Registration removed
+ok 8 - Registered: DROP OWNED BY with no table privileges
+ok 9 - Registered SQL ran as the dropping role
+ok 10 - Registration removed
+ok 11 - Unregistered: DROP SCHEMA CASCADE with no table privileges
+ok 12 - Unregistered: DROP OWNED BY with no table privileges
+ok 13 - Create registered test extension as role
+ok 14 - Register the recording SQL and demote the role
+ok 15 - Registered: DROP EXTENSION by the extension's non-superuser owner with no table privileges
+ok 16 - Registered SQL ran as the dropping role
+ok 17 - Unregistered: DROP EXTENSION by the extension's non-superuser owner with no table privileges
+ok 18 - Register SQL that needs CREATEROLE
+ok 19 - Registered SQL's own privilege error surfaces unchanged
+ok 20 - Registered: DROP SCHEMA CASCADE with a stale registration present
+ok 21 - Unregistered: DROP SCHEMA CASCADE with a stale registration present
+ok 22 - extension_drop__claim outside the event trigger fails
+ok 23 - extension_drop__claim outside the event trigger fails for a plain role
+ok 24 - The extension is still registered
+ok 25 - DROP SCHEMA CASCADE by a role that has a temp table of the same name
+ok 26 - The registered SQL still ran
+ok 27 - The real registration was removed
+ok 28 - extension_drop has the expected number of member functions
+ok 29 - Every extension_drop function pins search_path to pg_catalog, pg_temp
+ok 30 - Only extension_drop__claim is SECURITY DEFINER
+ok 31 - Grant CREATE on extension_drop's schema and plant = and <> operators on (name, name) and (name, text)
+ok 32 - Registered: DROP SCHEMA CASCADE by the role with the operators planted
+ok 33 - The claim function did not run the planted operators
+ok 34 - Plant the operators and insert a stale registration
+ok 35 - DROP SCHEMA CASCADE with a stale registration: XD001
+ok 36 - Neither the claim function (as owner) nor sanity_assert (as owner) ran the planted operators
+ok 37 - Remove the stale registration
+ok 38 - extension_drop__get as superuser, which runs sanity_assert
+ok 39 - Superuser drop of a registered extension, which runs the event trigger
+ok 40 - The invoker paths did not run the planted operators
+ok 41 - extension_drop's schema should not be reachable via search_path
 # TRANSACTION INTENTIONALLY LEFT OPEN!

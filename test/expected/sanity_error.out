@@ -1,16 +1,17 @@
 \set ECHO none
-1..13
-ok 1 - Insert a stale registration
-ok 2 - Capture the error from extension_drop__sanity_assert
-ok 3 - Capture the error from extension_drop__registered
-ok 4 - sanity_assert message
-ok 5 - sanity_assert DETAIL
-ok 6 - sanity_assert HINT
-ok 7 - registered message
-ok 8 - registered DETAIL
-ok 9 - registered HINT
-ok 10 - Insert a second stale registration
-ok 11 - Capture the error with two stale registrations
-ok 12 - Plural wording
-ok 13 - extension_drop's schema should not be reachable via search_path
+1..14
+ok 1 - Create a registered extension
+ok 2 - Insert a stale registration
+ok 3 - Capture the error from extension_drop__sanity_assert
+ok 4 - Capture the error from the event trigger
+ok 5 - sanity_assert message
+ok 6 - sanity_assert DETAIL
+ok 7 - sanity_assert HINT
+ok 8 - event trigger message
+ok 9 - event trigger DETAIL
+ok 10 - event trigger HINT
+ok 11 - Insert a second stale registration
+ok 12 - Capture the error with two stale registrations
+ok 13 - Plural wording
+ok 14 - extension_drop's schema should not be reachable via search_path
 # TRANSACTION INTENTIONALLY LEFT OPEN!
