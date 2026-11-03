@@ -4,8 +4,8 @@
 /*
  * Dropping an extension needs no privileges on extension_drop's registration table, for the three commands
  * the trigger fires for, whether or not the extension is registered. Also covered: registered SQL runs as
- * the dropping role, and a stale registration still raises XD001. Every scenario runs between
- * ROLLBACK TO SAVEPOINT base, which this file's transaction makes possible.
+ * the dropping role, and a stale registration still raises XD001. Each scenario ends with
+ * ROLLBACK TO SAVEPOINT base; the file's single open transaction makes that possible.
  */
 SELECT plan(
   1 -- Setup: role

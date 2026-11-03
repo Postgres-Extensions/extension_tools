@@ -162,12 +162,12 @@ SELECT __extension_drop.safe_dump('extension_drop__commands', '');
  * This function runs with its OWNER's rights whenever extension_drop__claim()
  * (SECURITY DEFINER) calls it through extension_drop__sanity_assert().
  * Keep it definer-safe:
- * ============================================================================
  *
  *   - pinned search_path (done by create_function); every reference to our objects goes through
  *     @extension_schema@
  *   - no dynamic SQL, and the only argument is compared against data, never interpolated
  *   - it only reads
+ * ============================================================================
  */
 SELECT __extension_drop.create_function(
   'extension_drop__sanity_check'
@@ -190,12 +190,12 @@ $body$
  *
  * This function runs with its OWNER's rights whenever extension_drop__claim()
  * (SECURITY DEFINER) calls it. Keep it definer-safe:
- * ============================================================================
  *
  *   - pinned search_path (done by create_function); every reference to our objects goes through
  *     @extension_schema@
  *   - no dynamic SQL; the only argument reaches sanity_check as a comparison value
  *   - the only text it raises is built from table contents, which are data, never executed
+ * ============================================================================
  */
 SELECT __extension_drop.create_function(
   'extension_drop__sanity_assert'
@@ -337,7 +337,11 @@ SELECT __extension_drop.create_function(
   , 'TABLE(extension_name name, sql text) LANGUAGE plpgsql SECURITY DEFINER'
   , $body$
 BEGIN
-  -- RETURNING has no ORDER BY, hence the CTE. Name order in "C" collation, independent of the database's; no order is semantically needed (the dropped objects are already gone).
+  /*
+   * Registered SQL needs a deterministic order, and pg_event_trigger_dropped_objects() has none, so sort
+   * by name ("C" collation, independent of the database's). Which order doesn't matter: the dropped
+   * extensions' objects are already gone. The CTE is needed because RETURNING has no ORDER BY.
+   */
   RETURN QUERY
     WITH del AS (
       DELETE FROM @extension_schema@.extension_drop__commands c

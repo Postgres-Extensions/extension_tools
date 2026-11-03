@@ -53,9 +53,9 @@ arbitrary SQL to run later. Grant them to specific roles as needed.
   `extension_drop__commands`, whether or not the extension is registered. The
   registered SQL runs as the dropping role, so that role needs whatever the SQL
   needs. Only the event trigger can use it: it deletes the registrations of the
-  extensions being dropped and returns them in extension-name order, and errors when
-  called outside a `sql_drop` trigger, so a direct call can't remove the
-  registration of a live extension. It is `SECURITY DEFINER` (with
+  extensions being dropped and returns them in extension-name order, and
+  errors when called outside a `sql_drop` trigger, so a direct call can't
+  remove the registration of a live extension. It is `SECURITY DEFINER` (with
   `search_path = pg_catalog, pg_temp` and schema-qualified references), runs
   `extension_drop__sanity_assert()` as its owner after the delete, and never
   executes the SQL. Granted to `PUBLIC`.
