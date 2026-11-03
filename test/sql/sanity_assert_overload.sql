@@ -12,7 +12,7 @@ SELECT plan(
   + 1 -- CREATE EXTENSION of a registering extension (extension_drop__add)
   + 1 -- extension_drop__get
   + 1 -- DROP EXTENSION of a registered extension (event trigger, extension_drop__claim)
-  + 3 -- DROP EXTENSION of an unregistered extension (claim with nothing registered)
+  + 2 -- DROP EXTENSION of an unregistered extension (claim with nothing registered)
   + 1 -- extension_drop's schema should not be on search_path (test/finish.sql)
 );
 
@@ -40,15 +40,13 @@ SELECT lives_ok(
   format($$SELECT * FROM %I.extension_drop__get('extension_drop_test')$$, :'extension_drop_schema')
   , 'extension_drop__get'
 );
+SAVEPOINT registered;
 SELECT lives_ok(
   'DROP EXTENSION extension_drop_test'
   , 'DROP EXTENSION runs the event trigger'
 );
+ROLLBACK TO SAVEPOINT registered;
 
-SELECT lives_ok(
-  'CREATE EXTENSION extension_drop_test'
-  , 'Create the extension again'
-);
 SELECT lives_ok(
   format($$SELECT %I.extension_drop__remove('extension_drop_test')$$, :'extension_drop_schema')
   , 'Unregister it'

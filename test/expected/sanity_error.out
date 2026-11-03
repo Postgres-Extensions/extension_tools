@@ -1,5 +1,5 @@
 \set ECHO none
-1..14
+1..16
 ok 1 - Create a registered extension
 ok 2 - Insert a stale registration
 ok 3 - Capture the error from extension_drop__sanity_assert
@@ -13,5 +13,7 @@ ok 10 - event trigger HINT
 ok 11 - Insert a second stale registration
 ok 12 - Capture the error with two stale registrations
 ok 13 - Plural wording
-ok 14 - extension_drop's schema should not be reachable via search_path
+ok 14 - Plural DETAIL names the first stale extension
+ok 15 - Plural DETAIL names the second stale extension
+ok 16 - extension_drop's schema should not be reachable via search_path
 # TRANSACTION INTENTIONALLY LEFT OPEN!

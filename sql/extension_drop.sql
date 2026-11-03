@@ -49,8 +49,7 @@ DECLARE
 
   /*
    * Every permanent function is pinned to pg_catalog, pg_temp so nothing a caller can create in a schema
-   * they control is ever resolved. Bodies refer to our own objects through @extension_schema@ (an
-   * identifier) or @extension_schema_literal@ (the same text as a string literal).
+   * they control is ever resolved. Bodies refer to our own objects through @extension_schema@.
    */
   create_template CONSTANT text := $template$
 CREATE OR REPLACE FUNCTION %s(
@@ -87,10 +86,7 @@ BEGIN
       , function_name
       , args
       , options
-      , pg_catalog.replace(
-          pg_catalog.replace(body, '@extension_schema@', ext_schema)
-          , '@extension_schema_literal@', pg_catalog.quote_literal(ext_schema)
-        )
+      , pg_catalog.replace(body, '@extension_schema@', ext_schema)
     ) )
   ;
 
@@ -179,7 +175,6 @@ SELECT array(
     FROM @extension_schema@.extension_drop__commands c
     WHERE NOT EXISTS(SELECT 1 FROM pg_extension e WHERE e.extname = c.extension_name)
       AND extension_name IS DISTINCT FROM ignore
-    ORDER BY extension_name COLLATE "C"
   )
 $body$
   , $$Returns an array of extensions that have drop commands but do not exist. This array should always be empty!$$
@@ -338,25 +333,16 @@ SELECT __extension_drop.create_function(
   , 'TABLE(extension_name name, sql text) LANGUAGE plpgsql SECURITY DEFINER'
   , $body$
 BEGIN
-  /*
-   * Registered SQL needs a reproducible order, and pg_event_trigger_dropped_objects() has none, so sort
-   * by name. A name column already sorts in "C"; it is spelled out so the order can't change with the
-   * column type. Which order doesn't matter: the dropped extensions' objects are already gone. The CTE
-   * is needed because RETURNING has no ORDER BY.
-   */
   RETURN QUERY
-    WITH del AS (
-      DELETE FROM @extension_schema@.extension_drop__commands c
-        USING pg_event_trigger_dropped_objects() d
-        WHERE c.extension_name = d.object_name AND d.object_type = 'extension'
-        RETURNING c.extension_name, c.sql
-    )
-    SELECT del.extension_name, del.sql FROM del ORDER BY del.extension_name COLLATE "C";
+    DELETE FROM @extension_schema@.extension_drop__commands c
+      USING pg_event_trigger_dropped_objects() d
+      WHERE c.extension_name = d.object_name AND d.object_type = 'extension'
+      RETURNING c.extension_name, c.sql;
 
   PERFORM @extension_schema@.extension_drop__sanity_assert(NULL::name);
 END
 $body$
-  , $$Deletes and returns the registrations (extension_name, sql) of the extensions being dropped, in extension-name order, after asserting the table is sane. Only works inside the extension_drop event trigger.$$
+  , $$Deletes and returns the registrations (extension_name, sql) of the extensions being dropped, after asserting the table is sane. Only works inside the extension_drop event trigger.$$
   , 'public'
 );
 
@@ -378,16 +364,9 @@ BEGIN
     RETURN;
   END IF;
 
-  /*
-   * Registered SQL runs with path pg_catalog, <our schema>, pg_temp. The pin is restored right after so
-   * the rest of this function never sees our schema (the function-exit restore covers an error).
-   */
   FOR r IN SELECT * FROM @extension_schema@.extension_drop__claim() LOOP
     RAISE DEBUG E'extension "%" is being dropped; executing SQL:\n%', r.extension_name, r.sql;
-    PERFORM set_config('search_path', format('pg_catalog, %s, pg_temp', @extension_schema_literal@), true);
     EXECUTE r.sql;
-    -- qualified: registered SQL may have changed search_path; don't unqualify
-    PERFORM pg_catalog.set_config('search_path', 'pg_catalog, pg_temp', true);
   END LOOP;
 END
 $body$

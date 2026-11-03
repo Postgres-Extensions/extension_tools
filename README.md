@@ -53,12 +53,14 @@ arbitrary SQL to run later. Grant them to specific roles as needed.
   `extension_drop__commands`, whether or not the extension is registered. The
   registered SQL runs as the dropping role, so that role needs whatever the SQL
   needs. Only the event trigger can use it: it deletes the registrations of the
-  extensions being dropped and returns them in extension-name order, and
+  extensions being dropped and returns them, in no particular order, and
   errors when called outside a `sql_drop` trigger, so a direct call can't
   remove the registration of a live extension. It is `SECURITY DEFINER` (with
   `search_path = pg_catalog, pg_temp` and schema-qualified references), runs
   `extension_drop__sanity_assert()` as its owner after the delete, and never
-  executes the SQL. Granted to `PUBLIC`.
+  executes the SQL. Granted to `PUBLIC`. Its owner is the role that ran
+  `CREATE EXTENSION` (or the `ALTER EXTENSION ... UPDATE` that first created
+  it).
 
 - `extension_drop__sanity_check(ignore name DEFAULT NULL) RETURNS name[]`
   Returns the names of extensions that have registered drop commands but no
@@ -86,14 +88,14 @@ and runs the SQL registered for it via
 trigger for every drop, but it returns immediately unless an extension is
 among the dropped objects.
 
-Every extension_drop function pins `search_path = pg_catalog, pg_temp`. The
-registered SQL itself runs, as the dropping role, with `search_path =
-pg_catalog, <extension_drop's schema>, pg_temp`; schemas of extensions
-extension_drop depends on (such as cat_tools) are not on it, so registered
-SQL must qualify them. Because that path includes the extension_drop schema,
-CREATE on that schema is trusted: a role holding it can plant objects (for
-example a `varchar = varchar` operator, which `pg_catalog` has no exact match
-for) that registered SQL will resolve. Don't grant it to untrusted roles.
+Every extension_drop function pins `search_path = pg_catalog, pg_temp`, and
+so does the registered SQL: it runs, as the dropping role, under the event
+trigger's own pinned path. **Registered SQL must schema-qualify everything it
+uses**: its own extension's objects, cat_tools, and extension_drop's
+functions. Nothing but `pg_catalog` and `pg_temp` is on its path, so a role
+with CREATE on any schema can't plant objects that registered SQL resolves.
+Registered SQL runs in no particular order when one command drops several
+extensions.
 
 Dropping an extension, registered or not, needs no privileges on
 `extension_drop__commands`; the trigger gets the registered SQL from

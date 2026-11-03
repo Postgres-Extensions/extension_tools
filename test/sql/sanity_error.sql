@@ -11,7 +11,7 @@ SELECT plan(
   + 1 -- Capture from the event trigger (DROP EXTENSION)
   + 3 -- sanity_assert text
   + 3 -- event trigger text matches sanity_assert
-  + 3 -- Several extensions: plural wording
+  + 5 -- Several extensions: plural wording
   + 1 -- extension_drop's schema should not be on search_path (test/finish.sql)
 );
 
@@ -81,10 +81,21 @@ SELECT lives_ok(
   END $d$$q$, :'extension_drop_schema')
   , 'Capture the error with two stale registrations'
 );
-SELECT is(
+-- Names come out in no particular order
+SELECT matches(
   current_setting('extension_drop_test.plural_detail')
-  , 'These extensions do not exist: extension_drop_test_stale, extension_drop_test_stale2'
+  , '^These extensions do not exist: '
   , 'Plural wording'
+);
+SELECT matches(
+  current_setting('extension_drop_test.plural_detail')
+  , '\mextension_drop_test_stale\M'
+  , 'Plural DETAIL names the first stale extension'
+);
+SELECT matches(
+  current_setting('extension_drop_test.plural_detail')
+  , '\mextension_drop_test_stale2\M'
+  , 'Plural DETAIL names the second stale extension'
 );
 
 \i test/finish.sql
