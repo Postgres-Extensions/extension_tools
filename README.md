@@ -13,8 +13,9 @@ the event trigger runs as whichever role drops an extension, and resolves
 exact `GRANT USAGE ON SCHEMA ... TO PUBLIC` to run first. An event trigger
 (`extension_drop_usage_guard`, on `ddl_command_end` for `REVOKE` and `DROP
 OWNED`) rejects any later command that would remove it. If PUBLIC loses USAGE
-anyway (a superuser bypassed the trigger), every `REVOKE` and `DROP OWNED`
-fails with "PUBLIC lacks USAGE on schema ..." until the `GRANT` in its HINT
+anyway (for example, a superuser bypassed the trigger, the trigger was
+disabled or dropped, or the ACL arrived through a restore), every `REVOKE` and
+`DROP OWNED` fails with "PUBLIC lacks USAGE on schema ..." until the `GRANT` in its HINT
 is run.
 
 Granting USAGE to `PUBLIC` also exposes every other object in that schema
@@ -59,11 +60,8 @@ arbitrary SQL to run later. Grant them to specific roles as needed.
 - `extension_drop__sanity_assert(ignore name DEFAULT NULL) RETURNS void`
   Raises an error if `extension_drop__sanity_check()` (called with the same
   `ignore` argument) isn't empty. Granted to `PUBLIC` by default.
-
-- `extension_drop__sanity_error(bad name[]) RETURNS TABLE(message, detail, hint)`
-  The text of the `XD001` error raised for the stale extensions `bad`; shared
-  by `extension_drop__sanity_assert` and `extension_drop__registered`.
-  Granted to `PUBLIC` by default.
+  `extension_drop__registered` calls it, as its owner, when nothing it was
+  asked about is registered.
 
 - `extension_drop__repair() RETURNS void`
   Deletes any stale rows found by `extension_drop__sanity_check()`. This

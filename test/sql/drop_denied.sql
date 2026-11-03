@@ -20,7 +20,7 @@ SELECT plan(
   + 3 -- Unregistered, no table privileges: DROP OWNED BY
   + 5 -- Unregistered, SELECT but not DELETE
   + 6 -- Helper not executable: falls through to the caller's DELETE
-  + 15 -- Pinned search_path; planted operators in extension_drop's schema are not run by the helper or by a superuser's drops
+  + 22 -- Pinned search_path; planted operators in extension_drop's schema are not run by the helper or by a superuser's drops
   + 4 -- Temp table shadowing extension_drop__commands
   + 6 -- Stale registration
   + 4 -- DROP EXTENSION by a role that was a superuser when it created it
@@ -279,6 +279,55 @@ SELECT is(
   current_setting('extension_drop_test.hijacked')
   , 'no'
   , 'The helper did not run the planted operators'
+);
+
+-- With a stale row present the helper runs sanity_assert as the owner; the planted operators still must not run
+SELECT lives_ok(
+  format($$INSERT INTO %I.extension_drop__commands VALUES('extension_drop_test_stale', 'SELECT 1')$$, :'extension_drop_schema')
+  , 'Insert a stale registration'
+);
+SELECT lives_ok(
+  format($q$DO $d$
+  DECLARE m text; d text; h text;
+  BEGIN
+    SET LOCAL ROLE extension_drop_test_plain;
+    PERFORM %I.extension_drop__registered('{}');
+    RESET ROLE;
+  EXCEPTION WHEN sqlstate 'XD001' THEN
+    GET STACKED DIAGNOSTICS m = MESSAGE_TEXT, d = PG_EXCEPTION_DETAIL, h = PG_EXCEPTION_HINT;
+    PERFORM set_config('extension_drop_test.helper_text', concat_ws('|', m, d, h), false);
+  END $d$$q$, :'extension_drop_schema')
+  , 'Call the helper as that role with a stale row: XD001'
+);
+SELECT lives_ok(
+  format($q$DO $d$
+  DECLARE m text; d text; h text;
+  BEGIN
+    PERFORM * FROM %I.extension_drop__get('extension_drop_test_other');
+  EXCEPTION WHEN sqlstate 'XD001' THEN
+    GET STACKED DIAGNOSTICS m = MESSAGE_TEXT, d = PG_EXCEPTION_DETAIL, h = PG_EXCEPTION_HINT;
+    PERFORM set_config('extension_drop_test.get_text', concat_ws('|', m, d, h), false);
+  END $d$$q$, :'extension_drop_schema')
+  , 'Call extension_drop__get as superuser with a stale row: XD001'
+);
+SELECT is(
+  current_setting('extension_drop_test.hijacked')
+  , 'no'
+  , 'Neither the helper (as owner) nor sanity_assert (as superuser) ran the planted operators'
+);
+SELECT is(
+  current_setting('extension_drop_test.helper_text')
+  , E'unexpected drop commands|This extension does not exist: extension_drop_test_stale|This should not happen unless someone manually inserted into "extension_drop__commands" or messed with the "extension_drop" event trigger.\n  Use SELECT extension_drop__repair() to fix this.'
+  , 'The helper raises XD001 with the usual message, DETAIL and HINT'
+);
+SELECT is(
+  current_setting('extension_drop_test.helper_text')
+  , current_setting('extension_drop_test.get_text')
+  , 'extension_drop__get raises the identical XD001'
+);
+SELECT lives_ok(
+  format($$DELETE FROM %I.extension_drop__commands WHERE extension_name = 'extension_drop_test_stale'$$, :'extension_drop_schema')
+  , 'Remove the stale registration'
 );
 
 -- The invoker paths run with the caller's own rights, so a superuser is the interesting caller

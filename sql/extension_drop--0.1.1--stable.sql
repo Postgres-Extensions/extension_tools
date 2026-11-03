@@ -21,23 +21,6 @@ BEGIN
 
   FOR r IN SELECT * FROM (VALUES
     (
-      'extension_drop__sanity_error'
-      , 'bad name[]'
-      , 'TABLE(message text, detail text, hint text) LANGUAGE sql STABLE'
-      , $fn$
-SELECT 'unexpected drop commands'::text
-  , pg_catalog.format(
-    '%s not exist: %s'
-    , CASE WHEN pg_catalog.array_length(bad, 1) = 1 THEN 'This extension does' ELSE 'These extensions do' END
-    , pg_catalog.array_to_string(bad, ', ')
-  )
-  , $$This should not happen unless someone manually inserted into "extension_drop__commands" or messed with the "extension_drop" event trigger.
-  Use SELECT extension_drop__repair() to fix this.$$
-$fn$
-      , $$Returns the message, DETAIL and HINT of the XD001 error raised when the given extensions have drop commands but do not exist.$$
-      , NULL
-    ),
-    (
       'extension_drop__sanity_check'
       , 'ignore name DEFAULT NULL'
       , 'name[] LANGUAGE sql STABLE'
@@ -59,11 +42,16 @@ $fn$
       , $fn$
 DECLARE
   bad name[] := @extension_schema@.extension_drop__sanity_check(ignore);
-  err record;
 BEGIN
   IF pg_catalog.array_length(bad, 1) IS NOT NULL THEN
-    SELECT e.message, e.detail, e.hint INTO err FROM @extension_schema@.extension_drop__sanity_error(bad) e;
-    RAISE EXCEPTION '%', err.message USING ERRCODE = 'XD001', DETAIL = err.detail, HINT = err.hint;
+    RAISE EXCEPTION 'unexpected drop commands' USING ERRCODE = 'XD001'
+      , DETAIL = pg_catalog.format(
+        '%s not exist: %s'
+        , CASE WHEN pg_catalog.array_length(bad, 1) = 1 THEN 'This extension does' ELSE 'These extensions do' END
+        , pg_catalog.array_to_string(bad, ', ')
+      )
+      , HINT = $$This should not happen unless someone manually inserted into "extension_drop__commands" or messed with the "extension_drop" event trigger.
+  Use SELECT extension_drop__repair() to fix this.$$;
   END IF;
 END
 $fn$
@@ -167,19 +155,10 @@ DECLARE
     SELECT c.extension_name FROM @extension_schema@.extension_drop__commands c
       WHERE c.extension_name = ANY(extension_names) ORDER BY 1
   );
-  bad name[];
-  err record;
 BEGIN
   -- With nothing registered the trigger returns without reaching its own sanity assert, so check here.
   IF pg_catalog.array_length(ret, 1) IS NULL THEN
-    bad := array(
-      SELECT c.extension_name FROM @extension_schema@.extension_drop__commands c
-        WHERE NOT EXISTS (SELECT 1 FROM pg_catalog.pg_extension e WHERE e.extname = c.extension_name)
-    );
-    IF pg_catalog.array_length(bad, 1) IS NOT NULL THEN
-      SELECT e.message, e.detail, e.hint INTO err FROM @extension_schema@.extension_drop__sanity_error(bad) e;
-      RAISE EXCEPTION '%', err.message USING ERRCODE = 'XD001', DETAIL = err.detail, HINT = err.hint;
-    END IF;
+    PERFORM @extension_schema@.extension_drop__sanity_assert();
   END IF;
   RETURN ret;
 END
@@ -304,7 +283,7 @@ BEGIN
     nsname := (SELECT pg_catalog.quote_ident(n.nspname) FROM pg_catalog.pg_namespace n WHERE n.oid = ns);
     RAISE EXCEPTION 'PUBLIC lacks USAGE on schema %, which extension_drop requires', nsname
       USING ERRCODE = 'object_not_in_prerequisite_state'
-        , DETAIL = pg_catalog.format('Checked after %s.', tg_tag)
+        , DETAIL = pg_catalog.format('State found after %s; that command is rolled back.', tg_tag)
         , HINT = pg_catalog.format('Run GRANT USAGE ON SCHEMA %s TO PUBLIC. extension_drop resolves extension_drop__registered() as whichever role drops an extension, which needs USAGE on the schema.', nsname);
   END IF;
 END

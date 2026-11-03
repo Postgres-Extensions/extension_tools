@@ -63,8 +63,8 @@ SELECT is(
 );
 SELECT is(
   current_setting('extension_drop_test.detail')
-  , 'Checked after REVOKE.'
-  , 'DETAIL names the command'
+  , 'State found after REVOKE; that command is rolled back.'
+  , 'DETAIL names the command and says it is rolled back'
 );
 
 -- Only PUBLIC's USAGE matters

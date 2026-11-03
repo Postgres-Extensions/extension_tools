@@ -2,7 +2,7 @@
 \i test/pgxntool/setup.sql
 
 /*
- * Every path that raises XD001 gets its message, DETAIL and HINT from extension_drop__sanity_error().
+ * Every path that raises XD001 gets the same message, DETAIL and HINT.
  */
 SELECT plan(
   1 -- Setup: stale registration
@@ -10,8 +10,7 @@ SELECT plan(
   + 1 -- Capture from extension_drop__registered
   + 3 -- sanity_assert text
   + 3 -- registered text matches sanity_assert
-  + 1 -- extension_drop__sanity_error returns the same text
-  + 1 -- Several extensions: plural wording
+  + 3 -- Several extensions: plural wording
   + 1 -- extension_drop's schema should not be on search_path (test/finish.sql)
 );
 
@@ -62,20 +61,24 @@ SELECT is(current_setting('extension_drop_test.registered_msg'), current_setting
 SELECT is(current_setting('extension_drop_test.registered_detail'), current_setting('extension_drop_test.assert_detail'), 'registered DETAIL');
 SELECT is(current_setting('extension_drop_test.registered_hint'), current_setting('extension_drop_test.assert_hint'), 'registered HINT');
 
-SELECT results_eq(
-  format($$SELECT message, detail, hint FROM %I.extension_drop__sanity_error('{extension_drop_test_stale}')$$, :'extension_drop_schema')
-  , format(
-      $$VALUES (%L, %L, %L)$$
-      , current_setting('extension_drop_test.assert_msg')
-      , current_setting('extension_drop_test.assert_detail')
-      , current_setting('extension_drop_test.assert_hint')
-    )
-  , 'extension_drop__sanity_error returns the text both paths raised'
+SELECT lives_ok(
+  format($$INSERT INTO %I.extension_drop__commands VALUES('extension_drop_test_stale2', 'SELECT 1')$$, :'extension_drop_schema')
+  , 'Insert a second stale registration'
 );
-
-SELECT results_eq(
-  format($$SELECT detail FROM %I.extension_drop__sanity_error('{extension_drop_test_a,extension_drop_test_b}')$$, :'extension_drop_schema')
-  , $$VALUES ('These extensions do not exist: extension_drop_test_a, extension_drop_test_b')$$
+SELECT lives_ok(
+  format($q$DO $d$
+  DECLARE d text;
+  BEGIN
+    PERFORM %I.extension_drop__sanity_assert();
+  EXCEPTION WHEN sqlstate 'XD001' THEN
+    GET STACKED DIAGNOSTICS d = PG_EXCEPTION_DETAIL;
+    PERFORM set_config('extension_drop_test.plural_detail', d, false);
+  END $d$$q$, :'extension_drop_schema')
+  , 'Capture the error with two stale registrations'
+);
+SELECT is(
+  current_setting('extension_drop_test.plural_detail')
+  , 'These extensions do not exist: extension_drop_test_stale, extension_drop_test_stale2'
   , 'Plural wording'
 );
 
