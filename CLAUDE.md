@@ -22,8 +22,8 @@ Registered SQL runs under the event trigger's own pinned
 schema and dependency schemas (e.g. cat_tools) are not on that path, so
 registered SQL must qualify everything. The extension itself is genuinely
 schema-flexible. See `../ai/CLAUDE.md`'s "Schema-flexibility testing"
-section for the general methodology (why `schema=` and not `relocatable=` is what matters, and how
-to actually prove search_path-independence).
+section for the general methodology (why `schema=` and not `relocatable=`
+is what matters, and how to actually prove search_path-independence).
 
 `test/install/load.sql` implements this by installing into a freshly
 created, randomly named schema (a constant, quote-forcing prefix plus a
