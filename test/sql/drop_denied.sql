@@ -281,7 +281,7 @@ SELECT is_empty(
 SELECT is_definer(:'extension_drop_schema', 'extension_drop__claim', 'extension_drop__claim is SECURITY DEFINER');
 -- Drawn from the catalog, so a member function added later is checked too
 SELECT isnt_definer(:'extension_drop_schema', proname, proname || ' is SECURITY INVOKER')
-  FROM (:MEMBER_FUNCS) m WHERE proname <> 'extension_drop__claim';
+  FROM (:MEMBER_FUNCS) m WHERE proname <> 'extension_drop__claim' ORDER BY proname;
 
 /*
  * A role with CREATE on extension_drop's schema must not be able to run code as anyone who calls into it.

@@ -42,14 +42,14 @@ ok 39 - The real registration was removed
 ok 40 - extension_drop has exactly the expected member functions
 ok 41 - Every extension_drop function pins search_path to pg_catalog, pg_temp
 ok 42 - extension_drop__claim is SECURITY DEFINER
-ok 43 - extension_drop__sanity_check is SECURITY INVOKER
-ok 44 - extension_drop__sanity_assert is SECURITY INVOKER
-ok 45 - extension_drop__repair is SECURITY INVOKER
-ok 46 - extension_drop__get is SECURITY INVOKER
-ok 47 - extension_drop__add is SECURITY INVOKER
-ok 48 - extension_drop__remove is SECURITY INVOKER
-ok 49 - extension_drop__update is SECURITY INVOKER
-ok 50 - extension_drop__event_trigger is SECURITY INVOKER
+ok 43 - extension_drop__add is SECURITY INVOKER
+ok 44 - extension_drop__event_trigger is SECURITY INVOKER
+ok 45 - extension_drop__get is SECURITY INVOKER
+ok 46 - extension_drop__remove is SECURITY INVOKER
+ok 47 - extension_drop__repair is SECURITY INVOKER
+ok 48 - extension_drop__sanity_assert is SECURITY INVOKER
+ok 49 - extension_drop__sanity_check is SECURITY INVOKER
+ok 50 - extension_drop__update is SECURITY INVOKER
 ok 51 - extension_drop__usage_guard is SECURITY INVOKER
 ok 52 - Grant CREATE on extension_drop's schema and plant = and <> operators on (name, name) and (name, text)
 ok 53 - Registered: DROP SCHEMA CASCADE by the role with the operators planted
