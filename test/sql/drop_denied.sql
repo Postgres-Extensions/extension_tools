@@ -20,7 +20,7 @@ SELECT plan(
   + 3 -- Unregistered, no table privileges: DROP OWNED BY
   + 5 -- Unregistered, SELECT but not DELETE
   + 6 -- Helper not executable: falls through to the caller's DELETE
-  + 22 -- Pinned search_path; planted operators in extension_drop's schema are not run by the helper or by a superuser's drops
+  + 23 -- Pinned search_path; planted operators in extension_drop's schema are not run by the helper or by a superuser's drops
   + 4 -- Temp table shadowing extension_drop__commands
   + 6 -- Stale registration
   + 4 -- DROP EXTENSION by a role that was a superuser when it created it
@@ -81,9 +81,7 @@ SELECT is(
 );
 SELECT is(
   current_setting('extension_drop_test.hint')
-  , format(
-      'Run the drop as role %1$I or a superuser, or grant SELECT, DELETE on %2$I.extension_drop__commands to the current role.'
-      , current_user, :'extension_drop_schema')
+  , format('Run the drop as role %I or a superuser.', current_user)
   , 'HINT'
 );
 
@@ -236,8 +234,16 @@ SELECT lives_ok(
  * an exact match in the schema beats pg_catalog's for any function whose path puts the schema first.
  */
 SELECT is(
-  (SELECT count(*)::int FROM pg_proc p
-    WHERE p.pronamespace = quote_ident(:'extension_drop_schema')::regnamespace AND p.proname LIKE 'extension_drop%'
+  (SELECT count(*)::int FROM pg_depend d
+    WHERE d.classid = 'pg_proc'::regclass AND d.refclassid = 'pg_extension'::regclass AND d.deptype = 'e'
+      AND d.refobjid = (SELECT e.oid FROM pg_extension e WHERE e.extname = 'extension_drop'))
+  , 10 -- member functions; a new one must be added here (and so gets its pin checked)
+  , 'extension_drop has the expected number of member functions'
+);
+SELECT is(
+  (SELECT count(*)::int FROM pg_depend d JOIN pg_proc p ON p.oid = d.objid
+    WHERE d.classid = 'pg_proc'::regclass AND d.refclassid = 'pg_extension'::regclass AND d.deptype = 'e'
+      AND d.refobjid = (SELECT e.oid FROM pg_extension e WHERE e.extname = 'extension_drop')
       AND p.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, pg_temp'])
   , 0
   , 'Every extension_drop function pins search_path to pg_catalog, pg_temp'

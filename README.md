@@ -6,18 +6,24 @@ register additional SQL to run when a given extension is dropped.
 
 Requires [cat_tools](https://pgxn.org/dist/cat_tools/) >= 0.3.0.
 
-`PUBLIC` must have USAGE on the schema extension_drop is installed in:
-the event trigger runs as whichever role drops an extension, and resolves
-`extension_drop__registered()` in that schema. `CREATE EXTENSION` and
-`ALTER EXTENSION ... UPDATE` fail unless it does; the error's HINT gives the
-exact `GRANT USAGE ON SCHEMA ... TO PUBLIC` to run first. Event triggers on
-`REVOKE` and `DROP OWNED` protect it afterwards: `extension_drop__usage_guard`
-on `ddl_command_end` rejects (and rolls back) a command that would remove it,
-and `extension_drop__usage_guard_start` on `ddl_command_start` rejects any
-such command while PUBLIC already lacks USAGE (for example, a superuser
-bypassed the triggers, they were disabled or dropped, or the ACL arrived
-through a restore). Only that second error has the `GRANT` HINT: run it to
-recover.
+`PUBLIC` must have USAGE on the schema extension_drop is installed in. The
+event trigger runs as whichever role drops an extension, and resolves
+`extension_drop__registered()` in that schema.
+
+`CREATE EXTENSION` and `ALTER EXTENSION ... UPDATE` fail unless `PUBLIC` has
+USAGE. The error's HINT gives the exact `GRANT USAGE ON SCHEMA ... TO PUBLIC`
+to run first.
+
+Two event triggers on `REVOKE` and `DROP OWNED` protect it afterwards:
+
+- `extension_drop__usage_guard` (`ddl_command_end`) fails any command that
+  would remove USAGE, and the command has no effect.
+- `extension_drop__usage_guard_start` (`ddl_command_start`) fails any such
+  command while `PUBLIC` already lacks USAGE. That happens if a superuser
+  bypassed the triggers, they were disabled or dropped, or the ACL arrived
+  through a restore.
+
+Only the second error has the `GRANT` HINT. Run it to recover.
 
 Granting USAGE to `PUBLIC` also exposes every other object in that schema
 that has `PUBLIC` privileges (functions are executable by `PUBLIC` by
@@ -96,5 +102,6 @@ extensions are registered); it needs no privileges on `extension_drop__commands`
 Dropping a registered extension additionally needs SELECT and DELETE on that
 table. A role without the access gets an `insufficient_privilege` error that
 names the table, its owner and the extensions being dropped, with the
-underlying error as DETAIL and a HINT giving the grants that fix it. The
+underlying error as DETAIL and a HINT to run the drop as that owner or a
+superuser. The
 registered SQL runs as the caller and may need further privileges.

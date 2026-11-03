@@ -36,7 +36,10 @@ schema per test-file session (it never adds it to `search_path`, and
 never assumes a naming convention beyond what it queries from
 `pg_extension`/`pg_namespace` directly); `test/finish.sql` asserts at the
 end of every test file that the schema was never reachable via
-`search_path` regardless.
+`search_path` regardless. It emits one assertion with the same label in
+every mode; in existing mode (installed by an external pg_upgrade, placement
+not ours to assert) that assertion is `pass()` and checks nothing, so a
+single expected output serves all modes.
 
 `https://github.com/Postgres-Extensions/pg_count_nulls/pull/55` is the
 reference this was adapted from (not ported wholesale — see that PR, and

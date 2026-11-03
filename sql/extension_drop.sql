@@ -385,7 +385,6 @@ BEGIN
 
     -- Names are always double-quoted (embedded quotes doubled) in the primary message.
     SELECT o.owner
-        , format('%I.%I', n.nspname, c.relname) AS qname
         , (SELECT array_agg(format('"%s"', replace(u.x, '"', '""')) ORDER BY u.ord)
             FROM unnest(ARRAY[n.nspname::text, c.relname::text, o.owner::text]) WITH ORDINALITY u(x, ord)
           ) AS dq -- schema, table, owner
@@ -404,9 +403,7 @@ BEGIN
         , t.dq[1], t.dq[2], t.dq[3], dropping
       USING ERRCODE = 'insufficient_privilege'
         , DETAIL = msg
-        , HINT = format(
-            'Run the drop as role %s or a superuser, or grant SELECT, DELETE on %s to the current role.'
-            , quote_ident(t.owner), t.qname);
+        , HINT = format('Run the drop as role %s or a superuser.', quote_ident(t.owner));
   END;
 
   /*
@@ -417,6 +414,7 @@ BEGIN
     RAISE DEBUG E'extension "%" is being dropped; executing SQL:\n%', names[i], cmds[i];
     PERFORM set_config('search_path', format('pg_catalog, %s, pg_temp', @extension_schema_literal@), true);
     EXECUTE cmds[i];
+    -- qualified: registered SQL may have changed search_path
     PERFORM pg_catalog.set_config('search_path', 'pg_catalog, pg_temp', true);
   END LOOP;
 

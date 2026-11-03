@@ -21,6 +21,21 @@ SELECT plan(
 );
 
 SELECT quote_ident(:'extension_drop_schema') AS qschema \gset
+SELECT format('Command would remove PUBLIC''s USAGE on schema %s, which extension_drop requires', :'qschema') AS removal_msg
+  , format('PUBLIC lacks USAGE on schema %s, which extension_drop requires', :'qschema') AS lacks_msg
+  , format('Run GRANT USAGE ON SCHEMA %s TO PUBLIC. extension_drop resolves extension_drop__registered() as whichever role drops an extension, which needs USAGE on the schema.', :'qschema') AS lacks_hint
+\gset
+
+-- Runs sql and stores the HINT and DETAIL of the USAGE error it raises in extension_drop_test.hint / .detail
+CREATE FUNCTION pg_temp.xd_capture(sql text) RETURNS void LANGUAGE plpgsql AS $f$
+DECLARE h text; d text;
+BEGIN
+  EXECUTE sql;
+EXCEPTION WHEN object_not_in_prerequisite_state THEN
+  GET STACKED DIAGNOSTICS h = PG_EXCEPTION_HINT, d = PG_EXCEPTION_DETAIL;
+  PERFORM set_config('extension_drop_test.hint', h, false);
+  PERFORM set_config('extension_drop_test.detail', d, false);
+END $f$;
 
 SELECT lives_ok(
   'CREATE ROLE extension_drop_test_grantor'
@@ -30,7 +45,7 @@ SELECT lives_ok(
 SELECT throws_ok(
   format('REVOKE USAGE ON SCHEMA %I FROM PUBLIC', :'extension_drop_schema')
   , '55000'
-  , format('Command would remove PUBLIC''s USAGE on schema %s, which extension_drop requires', :'qschema')
+  , :'removal_msg'
   , 'REVOKE USAGE ON SCHEMA ... FROM PUBLIC is rejected'
 );
 SELECT is(
@@ -42,19 +57,11 @@ SELECT is(
 SELECT throws_ok(
   format('REVOKE ALL ON SCHEMA %I FROM PUBLIC', :'extension_drop_schema')
   , '55000'
-  , format('Command would remove PUBLIC''s USAGE on schema %s, which extension_drop requires', :'qschema')
+  , :'removal_msg'
   , 'REVOKE ALL ON SCHEMA ... FROM PUBLIC is rejected'
 );
 SELECT lives_ok(
-  format($q$DO $d$
-  DECLARE h text; d text;
-  BEGIN
-    REVOKE USAGE ON SCHEMA %I FROM PUBLIC;
-  EXCEPTION WHEN object_not_in_prerequisite_state THEN
-    GET STACKED DIAGNOSTICS h = PG_EXCEPTION_HINT, d = PG_EXCEPTION_DETAIL;
-    PERFORM set_config('extension_drop_test.hint', h, false);
-    PERFORM set_config('extension_drop_test.detail', d, false);
-  END $d$$q$, :'extension_drop_schema')
+  format('SELECT pg_temp.xd_capture(%L)', format($q$REVOKE USAGE ON SCHEMA %I FROM PUBLIC$q$, :'extension_drop_schema'))
   , 'Capture HINT and DETAIL'
 );
 SELECT is(
@@ -92,7 +99,7 @@ SELECT lives_ok(
 SELECT throws_ok(
   'DROP OWNED BY extension_drop_test_grantor'
   , '55000'
-  , format('Command would remove PUBLIC''s USAGE on schema %s, which extension_drop requires', :'qschema')
+  , :'removal_msg'
   , 'DROP OWNED BY the grantor of PUBLIC''s only USAGE is rejected'
 );
 SELECT lives_ok(
@@ -111,29 +118,22 @@ SELECT lives_ok(
 SELECT throws_ok(
   format('REVOKE USAGE ON SCHEMA %I FROM extension_drop_test_grantor', :'extension_drop_schema')
   , '55000'
-  , format('PUBLIC lacks USAGE on schema %s, which extension_drop requires', :'qschema')
+  , :'lacks_msg'
   , 'An unrelated REVOKE reports the missing USAGE'
 );
 SELECT lives_ok(
-  format($q$DO $d$
-  DECLARE h text;
-  BEGIN
-    REVOKE USAGE ON SCHEMA %I FROM extension_drop_test_grantor;
-  EXCEPTION WHEN object_not_in_prerequisite_state THEN
-    GET STACKED DIAGNOSTICS h = PG_EXCEPTION_HINT;
-    PERFORM set_config('extension_drop_test.hint', h, false);
-  END $d$$q$, :'extension_drop_schema')
+  format('SELECT pg_temp.xd_capture(%L)', format($q$REVOKE USAGE ON SCHEMA %I FROM extension_drop_test_grantor$q$, :'extension_drop_schema'))
   , 'Capture HINT'
 );
 SELECT is(
   current_setting('extension_drop_test.hint')
-  , format('Run GRANT USAGE ON SCHEMA %s TO PUBLIC. extension_drop resolves extension_drop__registered() as whichever role drops an extension, which needs USAGE on the schema.', :'qschema')
+  , :'lacks_hint'
   , 'HINT gives the GRANT and says why'
 );
 SELECT throws_ok(
   'DROP OWNED BY extension_drop_test_grantor'
   , '55000'
-  , format('PUBLIC lacks USAGE on schema %s, which extension_drop requires', :'qschema')
+  , :'lacks_msg'
   , 'DROP OWNED reports the missing USAGE'
 );
 SELECT lives_ok(
@@ -160,14 +160,7 @@ SELECT throws_ok(
   , 'Install into a schema without PUBLIC USAGE fails'
 );
 SELECT lives_ok(
-  $q$DO $d$
-  DECLARE h text;
-  BEGIN
-    CREATE EXTENSION extension_drop SCHEMA "xd no usage";
-  EXCEPTION WHEN object_not_in_prerequisite_state THEN
-    GET STACKED DIAGNOSTICS h = PG_EXCEPTION_HINT;
-    PERFORM set_config('extension_drop_test.hint', h, false);
-  END $d$$q$
+  format('SELECT pg_temp.xd_capture(%L)', $q$CREATE EXTENSION extension_drop SCHEMA "xd no usage"$q$)
   , 'Capture HINT'
 );
 SELECT is(
@@ -192,14 +185,7 @@ SELECT throws_ok(
   , 'Update of an install without PUBLIC USAGE fails'
 );
 SELECT lives_ok(
-  $q$DO $d$
-  DECLARE h text;
-  BEGIN
-    ALTER EXTENSION extension_drop UPDATE;
-  EXCEPTION WHEN object_not_in_prerequisite_state THEN
-    GET STACKED DIAGNOSTICS h = PG_EXCEPTION_HINT;
-    PERFORM set_config('extension_drop_test.hint', h, false);
-  END $d$$q$
+  format('SELECT pg_temp.xd_capture(%L)', $q$ALTER EXTENSION extension_drop UPDATE$q$)
   , 'Capture HINT'
 );
 SELECT is(
