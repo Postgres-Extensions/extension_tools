@@ -2,12 +2,10 @@
 \i test/pgxntool/setup.sql
 
 /*
- * (Registrations are set with a direct UPDATE: extension_drop__update() currently updates every row once
- * more than one extension is registered.)
- *
  * One command dropping several registered extensions runs their registered SQL in extension-name order,
  * whatever order the extensions were created in, and removes every registration. A registered SQL that calls
- * extension_drop__claim() again can't claim a surviving extension's registration.
+ * extension_drop__claim() again can't claim a surviving extension's registration. With two extensions
+ * registered, extension_drop__update() and extension_drop__remove() touch only the named one.
  */
 SELECT plan(
   1 -- Setup: table recording the order
@@ -21,6 +19,9 @@ SELECT plan(
   + 1 -- DROP EXTENSION of the first only
   + 1 -- The nested claim returned nothing
   + 1 -- The surviving registration is intact
+  + 1 -- Setup: recreate extension_drop_test
+  + 2 -- extension_drop__update() changes only the named registration
+  + 2 -- extension_drop__remove() removes only the named registration
   + 1 -- extension_drop's schema should not be on search_path (test/finish.sql)
 );
 
@@ -33,9 +34,9 @@ SELECT lives_ok('CREATE EXTENSION extension_drop_test_b', 'Create extension_drop
 SELECT lives_ok('CREATE EXTENSION extension_drop_test', 'Create extension_drop_test');
 
 SELECT lives_ok(
-  format($$UPDATE %I.extension_drop__commands SET sql = %L WHERE extension_name = %L$$
-    , :'extension_drop_schema'
-    , format($s$INSERT INTO pg_temp.extension_drop_test_order(name) VALUES (%L)$s$, n), n)
+  format($$SELECT %I.extension_drop__update(%L, %L)$$
+    , :'extension_drop_schema', n
+    , format($s$INSERT INTO pg_temp.extension_drop_test_order(name) VALUES (%L)$s$, n))
   , 'Register recording SQL for ' || n
 )
   FROM unnest(ARRAY['extension_drop_test_b', 'extension_drop_test']) n;
@@ -58,7 +59,7 @@ SELECT lives_ok('CREATE EXTENSION extension_drop_test_b', 'Recreate extension_dr
 SELECT lives_ok('CREATE EXTENSION extension_drop_test', 'Recreate extension_drop_test');
 
 SELECT lives_ok(
-  format($$UPDATE %I.extension_drop__commands SET sql = %L WHERE extension_name = 'extension_drop_test'$$
+  format($$SELECT %I.extension_drop__update('extension_drop_test', %L)$$
     , :'extension_drop_schema'
     , $s$INSERT INTO pg_temp.extension_drop_test_order(name) SELECT 'nested claim returned ' || count(*) FROM extension_drop__claim()$s$)
   , 'Register SQL that calls extension_drop__claim()'
@@ -75,6 +76,30 @@ SELECT results_eq(
   format('SELECT extension_name, sql FROM %I.extension_drop__commands', :'extension_drop_schema')
   , $$VALUES ('extension_drop_test_b'::name, 'DELETE FROM extension_drop_test_table'::text)$$
   , 'The surviving extension keeps its registration'
+);
+
+\set B_ROW '$$VALUES (''extension_drop_test_b''::name, ''DELETE FROM extension_drop_test_table''::text)$$'
+
+SELECT lives_ok('CREATE EXTENSION extension_drop_test', 'Recreate extension_drop_test');
+
+SELECT lives_ok(
+  format($$SELECT %I.extension_drop__update('extension_drop_test', 'SELECT 1')$$, :'extension_drop_schema')
+  , 'Update extension_drop_test registration'
+);
+SELECT results_eq(
+  format('SELECT extension_name, sql FROM %I.extension_drop__commands ORDER BY 1', :'extension_drop_schema')
+  , $$VALUES ('extension_drop_test'::name, 'SELECT 1'::text), ('extension_drop_test_b'::name, 'DELETE FROM extension_drop_test_table'::text)$$
+  , 'Update left the other registration unchanged'
+);
+
+SELECT lives_ok(
+  format($$SELECT %I.extension_drop__remove('extension_drop_test')$$, :'extension_drop_schema')
+  , 'Remove extension_drop_test registration'
+);
+SELECT results_eq(
+  format('SELECT extension_name, sql FROM %I.extension_drop__commands', :'extension_drop_schema')
+  , :B_ROW
+  , 'Remove left the other registration in place'
 );
 
 \i test/finish.sql

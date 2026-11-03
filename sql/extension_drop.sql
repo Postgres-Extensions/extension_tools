@@ -179,6 +179,7 @@ SELECT array(
     FROM @extension_schema@.extension_drop__commands c
     WHERE NOT EXISTS(SELECT 1 FROM pg_extension e WHERE e.extname = c.extension_name)
       AND extension_name IS DISTINCT FROM ignore
+    ORDER BY extension_name COLLATE "C"
   )
 $body$
   , $$Returns an array of extensions that have drop commands but do not exist. This array should always be empty!$$
@@ -298,7 +299,7 @@ $$
   , $body$
 DELETE FROM @extension_schema@.extension_drop__commands d
   -- extension_drop__get() runs sanity checks for us
-  WHERE d.extension_name = (@extension_schema@.extension_drop__get(extension_name)).extension_name
+  WHERE d.extension_name = (@extension_schema@.extension_drop__get(extension_drop__remove.extension_name)).extension_name
 $body$
   , $$Remove a set of commands to be run when an extension is dropped.$$
   , '' -- Just revoke all access
@@ -318,7 +319,7 @@ $$
 UPDATE @extension_schema@.extension_drop__commands d
   SET sql = extension_drop__update.sql
   -- extension_drop__get() runs sanity checks for us
-  WHERE d.extension_name = (@extension_schema@.extension_drop__get(extension_name)).extension_name
+  WHERE d.extension_name = (@extension_schema@.extension_drop__get(extension_drop__update.extension_name)).extension_name
 $body$
   , $$Update the set of commands to be run when an extension is dropped.$$
   , '' -- Just revoke all access
@@ -338,9 +339,10 @@ SELECT __extension_drop.create_function(
   , $body$
 BEGIN
   /*
-   * Registered SQL needs a deterministic order, and pg_event_trigger_dropped_objects() has none, so sort
-   * by name ("C" collation, independent of the database's). Which order doesn't matter: the dropped
-   * extensions' objects are already gone. The CTE is needed because RETURNING has no ORDER BY.
+   * Registered SQL needs a reproducible order, and pg_event_trigger_dropped_objects() has none, so sort
+   * by name. A name column already sorts in "C"; it is spelled out so the order can't change with the
+   * column type. Which order doesn't matter: the dropped extensions' objects are already gone. The CTE
+   * is needed because RETURNING has no ORDER BY.
    */
   RETURN QUERY
     WITH del AS (
