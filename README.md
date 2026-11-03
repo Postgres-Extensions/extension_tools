@@ -11,7 +11,7 @@ the event trigger runs as whichever role drops an extension, and resolves
 `extension_drop__registered()` in that schema. `CREATE EXTENSION` and
 `ALTER EXTENSION ... UPDATE` fail unless it does; the error's HINT gives the
 exact `GRANT USAGE ON SCHEMA ... TO PUBLIC` to run first. An event trigger
-(`extension_drop_usage_guard`, on `ddl_command_end` for `REVOKE` and `DROP
+(`extension_drop__usage_guard`, on `ddl_command_end` for `REVOKE` and `DROP
 OWNED`) rejects any later command that would remove it. If PUBLIC loses USAGE
 anyway (for example, a superuser bypassed the trigger, the trigger was
 disabled or dropped, or the ACL arrived through a restore), every `REVOKE` and

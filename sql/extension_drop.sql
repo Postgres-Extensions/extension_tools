@@ -454,7 +454,7 @@ BEGIN
     nsname := (SELECT pg_catalog.quote_ident(n.nspname) FROM pg_catalog.pg_namespace n WHERE n.oid = ns);
     RAISE EXCEPTION 'PUBLIC lacks USAGE on schema %, which extension_drop requires', nsname
       USING ERRCODE = 'object_not_in_prerequisite_state'
-        , DETAIL = pg_catalog.format('State found after %s; that command is rolled back.', tg_tag)
+        , DETAIL = pg_catalog.format('DDL command: %s', tg_tag)
         , HINT = pg_catalog.format('Run GRANT USAGE ON SCHEMA %s TO PUBLIC. extension_drop resolves extension_drop__registered() as whichever role drops an extension, which needs USAGE on the schema.', nsname);
   END IF;
 END
@@ -462,7 +462,7 @@ $body$
   , 'Event trigger function that stops PUBLIC losing USAGE on the schema extension_drop is installed in.'
 );
 
-CREATE EVENT TRIGGER extension_drop_usage_guard
+CREATE EVENT TRIGGER extension_drop__usage_guard
   ON ddl_command_end
   WHEN tag IN( 'REVOKE', 'DROP OWNED' ) -- NOTE! This MUST be IN
   EXECUTE PROCEDURE extension_drop__usage_guard()

@@ -6,7 +6,7 @@ ok 3 - PUBLIC still has USAGE
 ok 4 - REVOKE ALL ON SCHEMA ... FROM PUBLIC is rejected
 ok 5 - Capture HINT and DETAIL
 ok 6 - HINT gives the GRANT and says why
-ok 7 - DETAIL names the command and says it is rolled back
+ok 7 - DETAIL names the command
 ok 8 - REVOKE from a role other than PUBLIC is allowed
 ok 9 - PUBLIC keeps USAGE through the grantor's own grant
 ok 10 - DROP OWNED BY the grantor of PUBLIC's only USAGE is rejected
