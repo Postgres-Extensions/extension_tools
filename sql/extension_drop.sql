@@ -366,6 +366,8 @@ BEGIN
 
   FOR r IN SELECT * FROM @extension_schema@.extension_drop__claim() LOOP
     RAISE DEBUG E'extension "%" is being dropped; executing SQL:\n%', r.extension_name, r.sql;
+    -- qualified: an earlier registration may have changed search_path
+    PERFORM pg_catalog.set_config('search_path', 'pg_catalog, pg_temp', true);
     EXECUTE r.sql;
   END LOOP;
 END
