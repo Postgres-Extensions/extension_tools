@@ -15,7 +15,7 @@ SELECT plan(
   + 5 -- XD001 text
   + 6 -- drops involving no extension
   + 6 -- claim outside the trigger, temp table of the same name
-  + 12 -- member functions
+  + 13 -- member functions
   + 10 -- planted operators
 
   + 1 -- extension_drop's schema should not be on search_path (test/finish.sql)
@@ -276,12 +276,12 @@ ROLLBACK TO SAVEPOINT base;
  * Every function runs with a pinned search_path, and only extension_drop__claim is SECURITY DEFINER (so
  * the event trigger, and everything it runs, is the dropping role's own).
  */
--- Counted via pg_depend: in existing mode the schema may hold other objects, so functions_are() can't be used
+-- Counted via pg_depend: pgTAP has no member-function count, and functions_are() can't be used in existing mode (the schema may hold other objects)
 SELECT is(
   (SELECT count(*)::int FROM pg_depend d
     WHERE d.classid = 'pg_proc'::regclass AND d.refclassid = 'pg_extension'::regclass AND d.deptype = 'e'
       AND d.refobjid = (SELECT e.oid FROM pg_extension e WHERE e.extname = 'extension_drop'))
-  , 10 -- member functions; a new one must be added here and to the list below (so its pin and definer-ness are checked)
+  , 10 -- member functions; a new one must be added here and to the isnt_definer list below
   , 'extension_drop has the expected number of member functions'
 );
 -- pgTAP has no assertion for proconfig
@@ -291,6 +291,14 @@ SELECT is_empty(
       AND d.refobjid = (SELECT e.oid FROM pg_extension e WHERE e.extname = 'extension_drop')
       AND p.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, pg_temp']$$
   , 'Every extension_drop function pins search_path to pg_catalog, pg_temp'
+);
+-- Catches a new SECURITY DEFINER function missing from the list below
+SELECT is_empty(
+  $$SELECT p.proname FROM pg_depend d JOIN pg_proc p ON p.oid = d.objid
+    WHERE d.classid = 'pg_proc'::regclass AND d.refclassid = 'pg_extension'::regclass AND d.deptype = 'e'
+      AND d.refobjid = (SELECT e.oid FROM pg_extension e WHERE e.extname = 'extension_drop')
+      AND p.prosecdef AND p.proname <> 'extension_drop__claim'$$
+  , 'extension_drop__claim is the only SECURITY DEFINER member function'
 );
 SELECT is_definer(:'extension_drop_schema', 'extension_drop__claim', 'extension_drop__claim is SECURITY DEFINER');
 SELECT isnt_definer(:'extension_drop_schema', n, n || ' is SECURITY INVOKER')

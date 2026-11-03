@@ -7,7 +7,7 @@
  */
 SELECT plan(
   1 -- test/helpers/test_ext__insert.sql
-  + 11 -- create, drop (two extensions at once), __remove and __add
+  + 11 -- lifecycle
 
   -- Other commands that drop an extension
   + 2 -- setup

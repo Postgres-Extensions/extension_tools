@@ -1,5 +1,5 @@
 \set ECHO none
-1..61
+1..62
 ok 1 - Create non-superuser role
 ok 2 - Create schema owned by role containing a registered extension
 ok 3 - Register SQL that records current_user
@@ -40,25 +40,26 @@ ok 37 - The registered SQL still ran
 ok 38 - The real registration was removed
 ok 39 - extension_drop has the expected number of member functions
 ok 40 - Every extension_drop function pins search_path to pg_catalog, pg_temp
-ok 41 - extension_drop__claim is SECURITY DEFINER
-ok 42 - extension_drop__sanity_check is SECURITY INVOKER
-ok 43 - extension_drop__sanity_assert is SECURITY INVOKER
-ok 44 - extension_drop__repair is SECURITY INVOKER
-ok 45 - extension_drop__get is SECURITY INVOKER
-ok 46 - extension_drop__add is SECURITY INVOKER
-ok 47 - extension_drop__remove is SECURITY INVOKER
-ok 48 - extension_drop__update is SECURITY INVOKER
-ok 49 - extension_drop__event_trigger is SECURITY INVOKER
-ok 50 - extension_drop__usage_guard is SECURITY INVOKER
-ok 51 - Grant CREATE on extension_drop's schema and plant = and <> operators on (name, name) and (name, text)
-ok 52 - Registered: DROP SCHEMA CASCADE by the role with the operators planted
-ok 53 - The claim function did not run the planted operators
-ok 54 - Plant the operators and insert a stale registration
-ok 55 - DROP SCHEMA CASCADE with a stale registration: XD001
-ok 56 - Neither the claim function (as owner) nor sanity_assert (as owner) ran the planted operators
-ok 57 - Remove the stale registration
-ok 58 - extension_drop__get as superuser, which runs sanity_assert
-ok 59 - Superuser drop of a registered extension, which runs the event trigger
-ok 60 - The invoker paths did not run the planted operators
-ok 61 - extension_drop's schema should not be reachable via search_path
+ok 41 - extension_drop__claim is the only SECURITY DEFINER member function
+ok 42 - extension_drop__claim is SECURITY DEFINER
+ok 43 - extension_drop__sanity_check is SECURITY INVOKER
+ok 44 - extension_drop__sanity_assert is SECURITY INVOKER
+ok 45 - extension_drop__repair is SECURITY INVOKER
+ok 46 - extension_drop__get is SECURITY INVOKER
+ok 47 - extension_drop__add is SECURITY INVOKER
+ok 48 - extension_drop__remove is SECURITY INVOKER
+ok 49 - extension_drop__update is SECURITY INVOKER
+ok 50 - extension_drop__event_trigger is SECURITY INVOKER
+ok 51 - extension_drop__usage_guard is SECURITY INVOKER
+ok 52 - Grant CREATE on extension_drop's schema and plant = and <> operators on (name, name) and (name, text)
+ok 53 - Registered: DROP SCHEMA CASCADE by the role with the operators planted
+ok 54 - The claim function did not run the planted operators
+ok 55 - Plant the operators and insert a stale registration
+ok 56 - DROP SCHEMA CASCADE with a stale registration: XD001
+ok 57 - Neither the claim function (as owner) nor sanity_assert (as owner) ran the planted operators
+ok 58 - Remove the stale registration
+ok 59 - extension_drop__get as superuser, which runs sanity_assert
+ok 60 - Superuser drop of a registered extension, which runs the event trigger
+ok 61 - The invoker paths did not run the planted operators
+ok 62 - extension_drop's schema should not be reachable via search_path
 # TRANSACTION INTENTIONALLY LEFT OPEN!
