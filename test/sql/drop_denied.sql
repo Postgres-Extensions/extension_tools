@@ -281,7 +281,7 @@ SELECT is(
   (SELECT count(*)::int FROM pg_depend d
     WHERE d.classid = 'pg_proc'::regclass AND d.refclassid = 'pg_extension'::regclass AND d.deptype = 'e'
       AND d.refobjid = (SELECT e.oid FROM pg_extension e WHERE e.extname = 'extension_drop'))
-  , 10 -- member functions; a new one must be added here and to the isnt_definer list below
+  , 10 -- member functions; a new one must be added here
   , 'extension_drop has the expected number of member functions'
 );
 -- pgTAP has no assertion for proconfig
@@ -292,7 +292,7 @@ SELECT is_empty(
       AND p.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, pg_temp']$$
   , 'Every extension_drop function pins search_path to pg_catalog, pg_temp'
 );
--- Catches a new SECURITY DEFINER function missing from the list below
+-- Catches any SECURITY DEFINER function other than extension_drop__claim
 SELECT is_empty(
   $$SELECT p.proname FROM pg_depend d JOIN pg_proc p ON p.oid = d.objid
     WHERE d.classid = 'pg_proc'::regclass AND d.refclassid = 'pg_extension'::regclass AND d.deptype = 'e'
