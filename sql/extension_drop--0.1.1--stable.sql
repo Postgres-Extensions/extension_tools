@@ -1,6 +1,6 @@
 /*
- * Every function is re-created, not only the ones that gained a search_path pin: every function body
- * changed too. The calls below are the same as in extension_drop.sql.
+ * Every function is re-created: every body changed, and each one's pinned search_path goes from
+ * <schema>, cat_tools, pg_temp to pg_catalog, pg_temp. The calls below are the same as in extension_drop.sql.
  */
 DO $do$
 DECLARE
@@ -394,7 +394,7 @@ BEGIN
     RAISE DEBUG E'extension "%" is being dropped; executing SQL:\n%', names[i], cmds[i];
     PERFORM set_config('search_path', format('pg_catalog, %s, pg_temp', @extension_schema_literal@), true);
     EXECUTE cmds[i];
-    -- qualified: registered SQL may have changed search_path
+    -- qualified: registered SQL may have changed search_path; don't unqualify
     PERFORM pg_catalog.set_config('search_path', 'pg_catalog, pg_temp', true);
   END LOOP;
 

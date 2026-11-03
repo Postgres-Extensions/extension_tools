@@ -103,5 +103,5 @@ Dropping a registered extension additionally needs SELECT and DELETE on that
 table. A role without the access gets an `insufficient_privilege` error that
 names the table, its owner and the extensions being dropped, with the
 underlying error as DETAIL and a HINT to run the drop as that owner or a
-superuser. The
-registered SQL runs as the caller and may need further privileges.
+superuser. The registered SQL runs as the caller and may need further
+privileges.

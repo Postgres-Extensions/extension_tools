@@ -117,7 +117,7 @@ SELECT lives_ok(
 );
 SELECT lives_ok(
   :'DROP_SCHEMA'
-  , 'Registered: DROP SCHEMA CASCADE with the privileges the HINT names'
+  , 'Registered: DROP SCHEMA CASCADE with SELECT and DELETE granted'
 );
 SELECT is_empty(
   format($$SELECT unnest(%I.extension_drop__sanity_check())$$, :'extension_drop_schema')

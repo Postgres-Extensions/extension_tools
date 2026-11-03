@@ -414,7 +414,7 @@ BEGIN
     RAISE DEBUG E'extension "%" is being dropped; executing SQL:\n%', names[i], cmds[i];
     PERFORM set_config('search_path', format('pg_catalog, %s, pg_temp', @extension_schema_literal@), true);
     EXECUTE cmds[i];
-    -- qualified: registered SQL may have changed search_path
+    -- qualified: registered SQL may have changed search_path; don't unqualify
     PERFORM pg_catalog.set_config('search_path', 'pg_catalog, pg_temp', true);
   END LOOP;
 
