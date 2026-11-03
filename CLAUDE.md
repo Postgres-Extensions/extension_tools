@@ -20,9 +20,8 @@ the install and update scripts substitute with the quoted schema name.
 Registered SQL runs under the event trigger's own pinned
 `pg_catalog, pg_temp`, reset before each registration; the extension's
 schema and dependency schemas (e.g. cat_tools) are not on that path, so
-registered SQL must qualify everything. It's genuinely
-schema-flexible. See
-`../ai/CLAUDE.md`'s "Schema-flexibility testing" section for the general
+registered SQL must qualify everything. It's genuinely schema-flexible.
+See `../ai/CLAUDE.md`'s "Schema-flexibility testing" section for the general
 methodology (why `schema=` and not `relocatable=` is what matters, and how
 to actually prove search_path-independence).
 

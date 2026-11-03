@@ -96,10 +96,15 @@ so does the registered SQL: it runs, as the dropping role, under the event
 trigger's own pinned path. **Registered SQL must schema-qualify everything it
 uses**: tables and functions in any schema (including cat_tools and
 extension_drop's own functions). extension_drop's schema is whatever it was
-installed into; look it up with
-`SELECT extnamespace::regnamespace FROM pg_extension WHERE extname = 'extension_drop'`
-and build the SQL with `format('%I', ...)`. Nothing but `pg_catalog` and `pg_temp` is on its path, so a role
-with CREATE on any schema can't plant objects that registered SQL resolves.
+installed into, so look it up and build the reference with `%s` (not `%I`:
+`regnamespace` output is already quoted):
+
+    SELECT format('SELECT %s.extension_drop__get(%L)',
+                  extnamespace::regnamespace, 'my_extension')
+      FROM pg_extension WHERE extname = 'extension_drop';
+
+Nothing but `pg_catalog` and `pg_temp` is on the registered SQL's path, so a
+role with CREATE on any schema can't plant objects that it resolves.
 Registered SQL runs in no particular order when one command drops several
 extensions.
 
