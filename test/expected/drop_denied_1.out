@@ -1,5 +1,5 @@
 \set ECHO none
-1..75
+1..78
 ok 1 - Create non-superuser role
 ok 2 - Create schema owned by role containing a registered extension
 ok 3 - Registered: DROP SCHEMA CASCADE with no table privileges
@@ -48,31 +48,34 @@ ok 45 - Neither the helper (as owner) nor sanity_assert (as superuser) ran the p
 ok 46 - The helper raises XD001 with the usual message, DETAIL and HINT
 ok 47 - extension_drop__get raises the identical XD001
 ok 48 - Remove the stale registration
-ok 49 - Create a registered extension
-ok 50 - extension_drop__get as superuser, which runs sanity_assert
-ok 51 - Superuser DROP EXTENSION of a registered extension
-ok 52 - The registered and get paths did not run the planted operators
-ok 53 - Create an extension and unregister it
-ok 54 - Superuser DROP EXTENSION of an unregistered extension
-ok 55 - The unregistered path did not run the planted operators
-ok 56 - Remove the planted operators
-ok 57 - Revoke CREATE
-ok 58 - Recreate the registered extension
-ok 59 - Registered extension is still found when the caller has a temp table of the same name
-ok 60 - Unregister the extension
-ok 61 - Superuser drop schema
-ok 62 - Recreate the extension
+ok 49 - Plant a zero-argument extension_drop__sanity_assert()
+ok 50 - The helper still works as that role
+ok 51 - Create a registered extension
+ok 52 - extension_drop__get as superuser, which runs sanity_assert
+ok 53 - Superuser DROP EXTENSION of a registered extension
+ok 54 - The registered and get paths did not run the planted operators
+ok 55 - Create an extension and unregister it
+ok 56 - Superuser DROP EXTENSION of an unregistered extension
+ok 57 - The unregistered path did not run the planted operators
+ok 58 - Remove the planted operators
+ok 59 - Remove the planted sanity_assert
+ok 60 - Revoke CREATE
+ok 61 - Recreate the registered extension
+ok 62 - Registered extension is still found when the caller has a temp table of the same name
 ok 63 - Unregister the extension
-ok 64 - Insert a stale registration
-ok 65 - Unregistered: DROP SCHEMA CASCADE with a stale registration present
-ok 66 - Repair
-ok 67 - Superuser drop schema
-ok 68 - Create role
-ok 69 - Create test extension as role
-ok 70 - Demote role
-ok 71 - DROP EXTENSION by the extension's non-superuser owner
-ok 72 - Unregister the extension
-ok 73 - Unregistered: DROP EXTENSION by the extension's non-superuser owner with no table privileges
-ok 74 - No stale registration
-ok 75 # SKIP existing mode: extension_drop's placement is outside this suite's control
+ok 64 - Superuser drop schema
+ok 65 - Recreate the extension
+ok 66 - Unregister the extension
+ok 67 - Insert a stale registration
+ok 68 - Unregistered: DROP SCHEMA CASCADE with a stale registration present
+ok 69 - Repair
+ok 70 - Superuser drop schema
+ok 71 - Create role
+ok 72 - Create test extension as role
+ok 73 - Demote role
+ok 74 - DROP EXTENSION by the extension's non-superuser owner
+ok 75 - Unregister the extension
+ok 76 - Unregistered: DROP EXTENSION by the extension's non-superuser owner with no table privileges
+ok 77 - No stale registration
+ok 78 # SKIP existing mode: extension_drop's placement is outside this suite's control
 # TRANSACTION INTENTIONALLY LEFT OPEN!

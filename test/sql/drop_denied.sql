@@ -20,7 +20,7 @@ SELECT plan(
   + 3 -- Unregistered, no table privileges: DROP OWNED BY
   + 5 -- Unregistered, SELECT but not DELETE
   + 6 -- Helper not executable: falls through to the caller's DELETE
-  + 22 -- Pinned search_path; planted operators in extension_drop's schema are not run by the helper or by a superuser's drops
+  + 25 -- Pinned search_path; planted operators in extension_drop's schema are not run by the helper or by a superuser's drops
   + 4 -- Temp table shadowing extension_drop__commands
   + 6 -- Stale registration
   + 4 -- DROP EXTENSION by a role that was a superuser when it created it
@@ -330,6 +330,26 @@ SELECT lives_ok(
   , 'Remove the stale registration'
 );
 
+-- A same-named zero-argument function must not make calls to sanity_assert ambiguous
+SELECT lives_ok(
+  format($q$DO $d$
+  BEGIN
+    SET LOCAL ROLE extension_drop_test_plain;
+    CREATE FUNCTION %1$I.extension_drop__sanity_assert() RETURNS void LANGUAGE sql AS 'SELECT';
+    RESET ROLE;
+  END $d$$q$, :'extension_drop_schema')
+  , 'Plant a zero-argument extension_drop__sanity_assert()'
+);
+SELECT lives_ok(
+  format($q$DO $d$
+  BEGIN
+    SET LOCAL ROLE extension_drop_test_plain;
+    PERFORM %I.extension_drop__registered('{}');
+    RESET ROLE;
+  END $d$$q$, :'extension_drop_schema')
+  , 'The helper still works as that role'
+);
+
 -- The invoker paths run with the caller's own rights, so a superuser is the interesting caller
 SELECT lives_ok(
   $$CREATE EXTENSION extension_drop_test$$
@@ -365,6 +385,10 @@ SELECT is(
 SELECT lives_ok(
   format('DROP OPERATOR %1$I.=(name, name); DROP OPERATOR %1$I.=(name, text); DROP OPERATOR %1$I.<>(name, name); DROP OPERATOR %1$I.<>(name, text); DROP FUNCTION %1$I.xd_test_hijack(name, name); DROP FUNCTION %1$I.xd_test_hijack(name, text)', :'extension_drop_schema')
   , 'Remove the planted operators'
+);
+SELECT lives_ok(
+  format('DROP FUNCTION %I.extension_drop__sanity_assert()', :'extension_drop_schema')
+  , 'Remove the planted sanity_assert'
 );
 SELECT lives_ok(
   format('REVOKE CREATE ON SCHEMA %I FROM extension_drop_test_plain', :'extension_drop_schema')

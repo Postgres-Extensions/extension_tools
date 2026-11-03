@@ -15,8 +15,8 @@ exact `GRANT USAGE ON SCHEMA ... TO PUBLIC` to run first. An event trigger
 OWNED`) rejects any later command that would remove it. If PUBLIC loses USAGE
 anyway (for example, a superuser bypassed the trigger, the trigger was
 disabled or dropped, or the ACL arrived through a restore), every `REVOKE` and
-`DROP OWNED` fails with "PUBLIC lacks USAGE on schema ..." until the `GRANT` in its HINT
-is run.
+`DROP OWNED` fails with "PUBLIC lacks USAGE on schema ..." until the `GRANT` in
+its HINT is run.
 
 Granting USAGE to `PUBLIC` also exposes every other object in that schema
 that has `PUBLIC` privileges (functions are executable by `PUBLIC` by

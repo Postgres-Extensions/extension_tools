@@ -79,7 +79,7 @@ $$
 DECLARE
   ret @extension_schema@.extension_drop__commands;
 BEGIN
-  PERFORM @extension_schema@.extension_drop__sanity_assert();
+  PERFORM @extension_schema@.extension_drop__sanity_assert(NULL::name);
   SELECT INTO STRICT ret
       *
     FROM @extension_schema@.extension_drop__commands d
@@ -107,7 +107,7 @@ $$
       , $fn$
 BEGIN
   INSERT INTO @extension_schema@.extension_drop__commands VALUES(extension_name, sql);
-  PERFORM @extension_schema@.extension_drop__sanity_assert();
+  PERFORM @extension_schema@.extension_drop__sanity_assert(NULL::name);
 END
 $fn$
       , $$Adds a set of commands to be run when an extension is dropped.$$
@@ -158,7 +158,7 @@ DECLARE
 BEGIN
   -- With nothing registered the trigger returns without reaching its own sanity assert, so check here.
   IF pg_catalog.array_length(ret, 1) IS NULL THEN
-    PERFORM @extension_schema@.extension_drop__sanity_assert();
+    PERFORM @extension_schema@.extension_drop__sanity_assert(NULL::name);
   END IF;
   RETURN ret;
 END
@@ -263,7 +263,7 @@ BEGIN
    * Need to do this after the fact since the extensions being dropped have
    * already been removed from the catalog by the time this function is called.
    */
-  PERFORM @extension_schema@.extension_drop__sanity_assert();
+  PERFORM @extension_schema@.extension_drop__sanity_assert(NULL::name);
 END
 $fn$
       , 'Event trigger function that does the actual work for extension_drop.'
