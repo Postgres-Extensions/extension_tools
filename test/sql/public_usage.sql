@@ -72,8 +72,9 @@ SELECT lives_ok(
  */
 SELECT lives_ok(
   format($q$GRANT USAGE ON SCHEMA %1$I TO extension_drop_test_grantor WITH GRANT OPTION;
-    SELECT pg_temp.xd_as('extension_drop_test_grantor', 'GRANT USAGE ON SCHEMA %1$I TO PUBLIC');
-    REVOKE USAGE ON SCHEMA %1$I FROM PUBLIC$q$, :'extension_drop_schema')
+    SELECT pg_temp.xd_as('extension_drop_test_grantor', %2$L);
+    REVOKE USAGE ON SCHEMA %1$I FROM PUBLIC$q$, :'extension_drop_schema'
+    , format('GRANT USAGE ON SCHEMA %I TO PUBLIC', :'extension_drop_schema'))
   , 'PUBLIC keeps USAGE through the grantor''s own grant'
 );
 SELECT throws_ok(
