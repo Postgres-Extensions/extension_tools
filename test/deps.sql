@@ -56,8 +56,8 @@ EXCEPTION WHEN OTHERS THEN
 END $f$;
 
 /*
- * Runs sql as role, then resets the role. The role is set with SET LOCAL, so on error whoever catches it
- * reverts it.
+ * Runs sql as role, then resets the role. On error the role reverts when the enclosing subtransaction
+ * is rolled back.
  */
 CREATE FUNCTION pg_temp.xd_as(role name, sql text) RETURNS void LANGUAGE plpgsql AS $f$
 BEGIN

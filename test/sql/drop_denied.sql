@@ -264,7 +264,8 @@ ROLLBACK TO SAVEPOINT base;
  * Every function runs with a pinned search_path, and only extension_drop__claim is SECURITY DEFINER (so
  * the event trigger, and everything it runs, is the dropping role's own).
  */
--- bag_eq on (name, prosecdef), not functions_are(): in existing mode the schema may hold other objects, and an added overload or definer function must fail
+-- Not functions_are(): in existing mode the schema may hold other objects.
+-- Matching (name, prosecdef) rows makes an added overload or definer function fail.
 SELECT bag_eq(
   $$SELECT proname, prosecdef FROM ($$ || :'MEMBER_FUNCS' || $$) m$$
   , $$VALUES ('extension_drop__sanity_check', false), ('extension_drop__sanity_assert', false), ('extension_drop__repair', false)
