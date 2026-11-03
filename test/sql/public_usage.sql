@@ -71,14 +71,9 @@ SELECT lives_ok(
  * that role then removes it.
  */
 SELECT lives_ok(
-  format($q$DO $d$
-  BEGIN
-    GRANT USAGE ON SCHEMA %1$I TO extension_drop_test_grantor WITH GRANT OPTION;
-    SET LOCAL ROLE extension_drop_test_grantor;
-    GRANT USAGE ON SCHEMA %1$I TO PUBLIC;
-    RESET ROLE;
-    REVOKE USAGE ON SCHEMA %1$I FROM PUBLIC;
-  END $d$$q$, :'extension_drop_schema')
+  format($q$GRANT USAGE ON SCHEMA %1$I TO extension_drop_test_grantor WITH GRANT OPTION;
+    SELECT pg_temp.xd_as('extension_drop_test_grantor', 'GRANT USAGE ON SCHEMA %1$I TO PUBLIC');
+    REVOKE USAGE ON SCHEMA %1$I FROM PUBLIC$q$, :'extension_drop_schema')
   , 'PUBLIC keeps USAGE through the grantor''s own grant'
 );
 SELECT throws_ok(

@@ -106,11 +106,7 @@ SAVEPOINT clean;
 \i test/helpers/test_ext__insert.sql
 -- ALTER EXTENSION can't change the owner, so create it as that role
 SELECT lives_ok(
-  $q$DO $$ BEGIN
-    SET LOCAL ROLE extension_drop_test_owner;
-    CREATE EXTENSION extension_drop_test;
-    RESET ROLE;
-  END $$$q$
+  $$SELECT pg_temp.xd_as('extension_drop_test_owner', 'CREATE EXTENSION extension_drop_test')$$
   , 'Create test extension as role'
 );
 SELECT bag_eq(

@@ -11,11 +11,11 @@ SELECT plan(
   4 -- setup, table privileges
   + 8 -- DROP SCHEMA CASCADE and DROP OWNED BY, registered and not
   + 5 -- DROP EXTENSION by the owner
-  + 4 -- registered SQL's own error, stale registration
+  + 5 -- registered SQL's own error and the role after it, stale registration
   + 5 -- XD001 text
   + 6 -- drops involving no extension
   + 6 -- claim outside the trigger, temp table of the same name
-  + 13 -- member functions
+  + 12 -- member functions: names, search_path pin, claim, the 9 others
   + 10 -- planted operators
 
   + 1 -- extension_drop's schema should not be on search_path (test/finish.sql)
@@ -24,9 +24,11 @@ SELECT plan(
 -- Hide version-specific NOTICE/WARNING text from the drops
 SET client_min_messages = ERROR;
 
-\set DROP_SCHEMA 'DO $$ BEGIN SET LOCAL ROLE extension_drop_test_plain; DROP SCHEMA extension_drop_test_plain_schema CASCADE; RESET ROLE; END $$'
-\set DROP_OWNED 'DO $$ BEGIN SET LOCAL ROLE extension_drop_test_plain; DROP OWNED BY extension_drop_test_plain CASCADE; RESET ROLE; END $$'
-\set DROP_EXTENSION 'DO $$ BEGIN SET LOCAL ROLE extension_drop_test_owner; DROP EXTENSION extension_drop_test; RESET ROLE; END $$'
+\set DROP_SCHEMA 'SELECT pg_temp.xd_as(''extension_drop_test_plain'', ''DROP SCHEMA extension_drop_test_plain_schema CASCADE'')'
+\set DROP_OWNED 'SELECT pg_temp.xd_as(''extension_drop_test_plain'', ''DROP OWNED BY extension_drop_test_plain CASCADE'')'
+\set DROP_EXTENSION 'SELECT pg_temp.xd_as(''extension_drop_test_owner'', ''DROP EXTENSION extension_drop_test'')'
+-- extension_drop's member functions (pg_depend, deptype = 'e')
+\set MEMBER_FUNCS 'SELECT p.oid, p.proname, p.proconfig FROM pg_depend d JOIN pg_proc p ON p.oid = d.objid WHERE d.classid = ''pg_proc''::regclass AND d.refclassid = ''pg_extension''::regclass AND d.deptype = ''e'' AND d.refobjid = (SELECT e.oid FROM pg_extension e WHERE e.extname = ''extension_drop'')'
 \set RECREATE 'CREATE SCHEMA extension_drop_test_plain_schema AUTHORIZATION extension_drop_test_plain; CREATE EXTENSION extension_drop_test SCHEMA extension_drop_test_plain_schema'
 \set UNREGISTER 'SELECT ' :"extension_drop_schema" '.extension_drop__remove(''extension_drop_test'')'
 \set CAPTURE_XD001 'SELECT message, detail, hint FROM pg_temp.xd_capture(%L, ''XD001'')'
@@ -109,7 +111,7 @@ ROLLBACK TO SAVEPOINT base;
 DROP SCHEMA extension_drop_test_plain_schema CASCADE;
 CREATE ROLE extension_drop_test_owner SUPERUSER;
 SELECT lives_ok(
-  $q$DO $$ BEGIN SET LOCAL ROLE extension_drop_test_owner; CREATE EXTENSION extension_drop_test; RESET ROLE; END $$$q$
+  $$SELECT pg_temp.xd_as('extension_drop_test_owner', 'CREATE EXTENSION extension_drop_test')$$
   , 'Create registered test extension as role'
 );
 SELECT lives_ok(
@@ -144,6 +146,7 @@ SELECT throws_ok(
   , 'permission denied to create role'
   , 'Registered SQL''s own privilege error surfaces unchanged'
 );
+SELECT is(current_user::text, session_user::text, 'xd_as left the session role reset after the error');
 ROLLBACK TO SAVEPOINT base;
 
 -- A stale registration fails the drop whether or not the extension is registered
@@ -201,23 +204,15 @@ SELECT lives_ok(
   , 'Drop the extension so the drops below involve none'
 );
 SELECT lives_ok(
-  $q$DO $$ BEGIN
-    CREATE SCHEMA extension_drop_test_unrelated AUTHORIZATION extension_drop_test_plain
+  $$CREATE SCHEMA extension_drop_test_unrelated AUTHORIZATION extension_drop_test_plain
       CREATE TABLE t(i int);
-    SET LOCAL ROLE extension_drop_test_plain;
-    DROP SCHEMA extension_drop_test_unrelated CASCADE;
-    RESET ROLE;
-  END $$$q$
+    SELECT pg_temp.xd_as('extension_drop_test_plain', 'DROP SCHEMA extension_drop_test_unrelated CASCADE')$$
   , 'Non-superuser DROP SCHEMA CASCADE of a schema with no extension'
 );
 SELECT lives_ok(
-  $q$DO $$ BEGIN
-    CREATE SCHEMA extension_drop_test_unrelated AUTHORIZATION extension_drop_test_plain
+  $$CREATE SCHEMA extension_drop_test_unrelated AUTHORIZATION extension_drop_test_plain
       CREATE TABLE t(i int);
-    SET LOCAL ROLE extension_drop_test_plain;
-    DROP OWNED BY extension_drop_test_plain;
-    RESET ROLE;
-  END $$$q$
+    SELECT pg_temp.xd_as('extension_drop_test_plain', 'DROP OWNED BY extension_drop_test_plain')$$
   , 'Non-superuser DROP OWNED BY with no extension'
 );
 SELECT lives_ok(:'INSERT_STALE', 'Insert a stale registration');
@@ -240,7 +235,7 @@ SELECT throws_ok(
   , 'extension_drop__claim outside the event trigger fails'
 );
 SELECT throws_ok(
-  format('DO $$ BEGIN SET LOCAL ROLE extension_drop_test_plain; PERFORM %I.extension_drop__claim(); END $$', :'extension_drop_schema')
+  format($$SELECT pg_temp.xd_as('extension_drop_test_plain', 'SELECT %I.extension_drop__claim()')$$, :'extension_drop_schema')
   , '39P03'
   , 'pg_event_trigger_dropped_objects() can only be called in a sql_drop event trigger function'
   , 'extension_drop__claim outside the event trigger fails for a plain role'
@@ -252,13 +247,7 @@ SELECT isnt_empty(
 
 -- A temp table named like ours must not hide the real registration from claim
 SELECT lives_ok(
-  $q$DO $$
-  BEGIN
-    SET LOCAL ROLE extension_drop_test_plain;
-    CREATE TEMP TABLE extension_drop__commands(extension_name name, sql text);
-    DROP SCHEMA extension_drop_test_plain_schema CASCADE;
-    RESET ROLE;
-  END $$$q$
+  $$SELECT pg_temp.xd_as('extension_drop_test_plain', 'CREATE TEMP TABLE extension_drop__commands(extension_name name, sql text); DROP SCHEMA extension_drop_test_plain_schema CASCADE')$$
   , 'DROP SCHEMA CASCADE by a role that has a temp table of the same name'
 );
 SELECT is(
@@ -276,46 +265,30 @@ ROLLBACK TO SAVEPOINT base;
  * Every function runs with a pinned search_path, and only extension_drop__claim is SECURITY DEFINER (so
  * the event trigger, and everything it runs, is the dropping role's own).
  */
--- Counted via pg_depend: pgTAP has no member-function count, and functions_are() can't be used in existing mode (the schema may hold other objects)
-SELECT is(
-  (SELECT count(*)::int FROM pg_depend d
-    WHERE d.classid = 'pg_proc'::regclass AND d.refclassid = 'pg_extension'::regclass AND d.deptype = 'e'
-      AND d.refobjid = (SELECT e.oid FROM pg_extension e WHERE e.extname = 'extension_drop'))
-  , 10 -- member functions; a new one must be added here
-  , 'extension_drop has the expected number of member functions'
+-- set_eq rather than functions_are(): in existing mode the schema may hold other objects
+SELECT set_eq(
+  $$SELECT proname FROM ($$ || :'MEMBER_FUNCS' || $$) m$$
+  , $$VALUES ('extension_drop__sanity_check'), ('extension_drop__sanity_assert'), ('extension_drop__repair'), ('extension_drop__get')
+    , ('extension_drop__add'), ('extension_drop__remove'), ('extension_drop__update'), ('extension_drop__event_trigger')
+    , ('extension_drop__usage_guard'), ('extension_drop__claim')$$
+  , 'extension_drop has exactly the expected member functions'
 );
 -- pgTAP has no assertion for proconfig
 SELECT is_empty(
-  $$SELECT p.proname FROM pg_depend d JOIN pg_proc p ON p.oid = d.objid
-    WHERE d.classid = 'pg_proc'::regclass AND d.refclassid = 'pg_extension'::regclass AND d.deptype = 'e'
-      AND d.refobjid = (SELECT e.oid FROM pg_extension e WHERE e.extname = 'extension_drop')
-      AND p.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, pg_temp']$$
+  $$SELECT proname FROM ($$ || :'MEMBER_FUNCS' || $$) m WHERE proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, pg_temp']$$
   , 'Every extension_drop function pins search_path to pg_catalog, pg_temp'
 );
--- Catches any SECURITY DEFINER function other than extension_drop__claim
-SELECT is_empty(
-  $$SELECT p.proname FROM pg_depend d JOIN pg_proc p ON p.oid = d.objid
-    WHERE d.classid = 'pg_proc'::regclass AND d.refclassid = 'pg_extension'::regclass AND d.deptype = 'e'
-      AND d.refobjid = (SELECT e.oid FROM pg_extension e WHERE e.extname = 'extension_drop')
-      AND p.prosecdef AND p.proname <> 'extension_drop__claim'$$
-  , 'extension_drop__claim is the only SECURITY DEFINER member function'
-);
 SELECT is_definer(:'extension_drop_schema', 'extension_drop__claim', 'extension_drop__claim is SECURITY DEFINER');
-SELECT isnt_definer(:'extension_drop_schema', n, n || ' is SECURITY INVOKER')
-  FROM unnest(ARRAY[
-    'extension_drop__sanity_check', 'extension_drop__sanity_assert', 'extension_drop__repair', 'extension_drop__get'
-    , 'extension_drop__add', 'extension_drop__remove', 'extension_drop__update', 'extension_drop__event_trigger'
-    , 'extension_drop__usage_guard'
-  ]::name[]) n;
+-- Drawn from the catalog, so a member function added later is checked too
+SELECT isnt_definer(:'extension_drop_schema', proname, proname || ' is SECURITY INVOKER')
+  FROM (:MEMBER_FUNCS) m WHERE proname <> 'extension_drop__claim';
 
 /*
  * A role with CREATE on extension_drop's schema must not be able to run code as anyone who calls into it.
  * The planted operators are on the types the functions actually compare (name, name) and (name, text);
  * an exact match in the schema beats pg_catalog's for any function whose path puts the schema first.
  */
-SELECT format($q$DO $d$
-  BEGIN
-    SET LOCAL ROLE extension_drop_test_plain;
+SELECT format('SELECT pg_temp.xd_as(''extension_drop_test_plain'', %L)', format($q$
     CREATE FUNCTION %1$I.xd_test_hijack(name, name) RETURNS boolean LANGUAGE plpgsql AS
       $f$ BEGIN PERFORM set_config('extension_drop_test.hijacked', 'yes', false); RETURN true; END $f$;
     CREATE FUNCTION %1$I.xd_test_hijack(name, text) RETURNS boolean LANGUAGE plpgsql AS
@@ -324,8 +297,7 @@ SELECT format($q$DO $d$
     CREATE OPERATOR %1$I.= (LEFTARG = name, RIGHTARG = text, FUNCTION = %1$I.xd_test_hijack(name, text));
     CREATE OPERATOR %1$I.<> (LEFTARG = name, RIGHTARG = name, FUNCTION = %1$I.xd_test_hijack(name, name));
     CREATE OPERATOR %1$I.<> (LEFTARG = name, RIGHTARG = text, FUNCTION = %1$I.xd_test_hijack(name, text));
-    RESET ROLE;
-  END $d$$q$, :'extension_drop_schema') AS "PLANT" \gset
+  $q$, :'extension_drop_schema')) AS "PLANT" \gset
 SELECT format('GRANT CREATE ON SCHEMA %I TO extension_drop_test_plain', :'extension_drop_schema') AS "GRANT_CREATE" \gset
 
 SELECT lives_ok(

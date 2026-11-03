@@ -55,4 +55,17 @@ EXCEPTION WHEN OTHERS THEN
   RETURN NEXT;
 END $f$;
 
+/*
+ * Runs sql as role, then resets the role, including when sql raises (the error propagates).
+ */
+CREATE FUNCTION pg_temp.xd_as(role name, sql text) RETURNS void LANGUAGE plpgsql AS $f$
+BEGIN
+  EXECUTE format('SET LOCAL ROLE %I', role);
+  EXECUTE sql;
+  RESET ROLE;
+EXCEPTION WHEN OTHERS THEN
+  RESET ROLE;
+  RAISE;
+END $f$;
+
 -- vi: expandtab ts=2 sw=2

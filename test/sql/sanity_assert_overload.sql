@@ -23,12 +23,7 @@ SELECT lives_ok(
   , 'Create a role with CREATE on extension_drop''s schema'
 );
 SELECT lives_ok(
-  format($q$DO $d$
-  BEGIN
-    SET LOCAL ROLE extension_drop_test_plain;
-    CREATE FUNCTION %1$I.extension_drop__sanity_assert() RETURNS void LANGUAGE sql AS 'SELECT';
-    RESET ROLE;
-  END $d$$q$, :'extension_drop_schema')
+  format($$SELECT pg_temp.xd_as('extension_drop_test_plain', 'CREATE FUNCTION %I.extension_drop__sanity_assert() RETURNS void LANGUAGE sql AS ''SELECT''')$$, :'extension_drop_schema')
   , 'Plant a zero-argument extension_drop__sanity_assert()'
 );
 
