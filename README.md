@@ -1,8 +1,8 @@
 # extension_drop
 
-Run custom commands when an extension is dropped. By default, `DROP
-EXTENSION` simply drops all the objects the extension owns; this lets you
-register additional SQL to run when a given extension is dropped.
+Register SQL that runs when a given extension is dropped, whether by `DROP
+EXTENSION`, `DROP SCHEMA ... CASCADE` or `DROP OWNED BY`. The registration is
+removed with the extension.
 
 Requires [cat_tools](https://pgxn.org/dist/cat_tools/) >= 0.3.0.
 
@@ -53,7 +53,7 @@ arbitrary SQL to run later. Grant them to specific roles as needed.
   `extension_drop__commands`, whether or not the extension is registered. The
   registered SQL runs as the dropping role, so that role needs whatever the SQL
   needs. Only the event trigger can use it: it deletes the registrations of the
-  extensions being dropped and returns them in drop order, and errors when
+  extensions being dropped and returns them in extension-name order, and errors when
   called outside a `sql_drop` trigger, so a direct call can't remove the
   registration of a live extension. It is `SECURITY DEFINER` (with
   `search_path = pg_catalog, pg_temp` and schema-qualified references), runs

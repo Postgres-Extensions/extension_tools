@@ -2,9 +2,9 @@
 \i test/pgxntool/setup.sql
 
 /*
- * A role that can drop an extension needs no privileges on extension_drop's registration table, whether or
- * not the extension is registered; registered SQL runs as the dropping role; a stale registration still
- * raises XD001. Covers the three commands the trigger fires for. Every scenario runs between
+ * Dropping an extension needs no privileges on extension_drop's registration table, for the three commands
+ * the trigger fires for, whether or not the extension is registered. Also covered: registered SQL runs as
+ * the dropping role, and a stale registration still raises XD001. Every scenario runs between
  * ROLLBACK TO SAVEPOINT base, which this file's transaction makes possible.
  */
 SELECT plan(

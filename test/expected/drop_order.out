@@ -1,0 +1,18 @@
+\set ECHO none
+1..15
+ok 1 - Create order table
+ok 2 - Create extension_drop_test_b
+ok 3 - Create extension_drop_test
+ok 4 - Register recording SQL for extension_drop_test_b
+ok 5 - Register recording SQL for extension_drop_test
+ok 6 - Drop both extensions with one command
+ok 7 - Registered SQL ran in extension-name order
+ok 8 - Registrations removed
+ok 9 - Recreate extension_drop_test_b
+ok 10 - Recreate extension_drop_test
+ok 11 - Register SQL that calls extension_drop__claim()
+ok 12 - Drop extension_drop_test only
+ok 13 - The nested claim returned no rows
+ok 14 - The surviving extension keeps its registration
+ok 15 - extension_drop's schema should not be reachable via search_path
+# TRANSACTION INTENTIONALLY LEFT OPEN!

@@ -156,8 +156,14 @@ CREATE TABLE extension_drop__commands(
 SELECT __extension_drop.safe_dump('extension_drop__commands', '');
 
 /*
- * WARNING: this function runs with its OWNER's rights whenever extension_drop__claim() (SECURITY DEFINER)
- * calls it through extension_drop__sanity_assert(). Keep it definer-safe:
+ * ============================================================================
+ * WARNING: DEFINER-SAFE CODE ONLY
+ *
+ * This function runs with its OWNER's rights whenever extension_drop__claim()
+ * (SECURITY DEFINER) calls it through extension_drop__sanity_assert().
+ * Keep it definer-safe:
+ * ============================================================================
+ *
  *   - pinned search_path (done by create_function); every reference to our objects goes through
  *     @extension_schema@
  *   - no dynamic SQL, and the only argument is compared against data, never interpolated
@@ -179,8 +185,13 @@ $body$
 );
 
 /*
- * WARNING: this function runs with its OWNER's rights whenever extension_drop__claim() (SECURITY DEFINER)
- * calls it. Keep it definer-safe:
+ * ============================================================================
+ * WARNING: DEFINER-SAFE CODE ONLY
+ *
+ * This function runs with its OWNER's rights whenever extension_drop__claim()
+ * (SECURITY DEFINER) calls it. Keep it definer-safe:
+ * ============================================================================
+ *
  *   - pinned search_path (done by create_function); every reference to our objects goes through
  *     @extension_schema@
  *   - no dynamic SQL; the only argument reaches sanity_check as a comparison value
@@ -326,20 +337,20 @@ SELECT __extension_drop.create_function(
   , 'TABLE(extension_name name, sql text) LANGUAGE plpgsql SECURITY DEFINER'
   , $body$
 BEGIN
-  -- RETURNING has no ORDER BY, hence the CTE. Registered SQL runs in the order the command dropped the extensions.
+  -- RETURNING has no ORDER BY, hence the CTE. Name order in "C" collation, independent of the database's; no order is semantically needed (the dropped objects are already gone).
   RETURN QUERY
     WITH del AS (
       DELETE FROM @extension_schema@.extension_drop__commands c
-        USING pg_event_trigger_dropped_objects() WITH ORDINALITY d
+        USING pg_event_trigger_dropped_objects() d
         WHERE c.extension_name = d.object_name AND d.object_type = 'extension'
-        RETURNING c.extension_name, c.sql, d.ordinality AS ord
+        RETURNING c.extension_name, c.sql
     )
-    SELECT del.extension_name, del.sql FROM del ORDER BY del.ord;
+    SELECT del.extension_name, del.sql FROM del ORDER BY del.extension_name COLLATE "C";
 
   PERFORM @extension_schema@.extension_drop__sanity_assert(NULL::name);
 END
 $body$
-  , $$Deletes and returns the registrations (extension_name, sql) of the extensions being dropped, in drop order, after asserting the table is sane. Only works inside the extension_drop event trigger.$$
+  , $$Deletes and returns the registrations (extension_name, sql) of the extensions being dropped, in extension-name order, after asserting the table is sane. Only works inside the extension_drop event trigger.$$
   , 'public'
 );
 
