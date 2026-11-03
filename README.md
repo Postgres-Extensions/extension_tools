@@ -10,13 +10,14 @@ Requires [cat_tools](https://pgxn.org/dist/cat_tools/) >= 0.3.0.
 the event trigger runs as whichever role drops an extension, and resolves
 `extension_drop__registered()` in that schema. `CREATE EXTENSION` and
 `ALTER EXTENSION ... UPDATE` fail unless it does; the error's HINT gives the
-exact `GRANT USAGE ON SCHEMA ... TO PUBLIC` to run first. An event trigger
-(`extension_drop__usage_guard`, on `ddl_command_end` for `REVOKE` and `DROP
-OWNED`) rejects any later command that would remove it. If PUBLIC loses USAGE
-anyway (for example, a superuser bypassed the trigger, the trigger was
-disabled or dropped, or the ACL arrived through a restore), every `REVOKE` and
-`DROP OWNED` fails with "PUBLIC lacks USAGE on schema ..." until the `GRANT` in
-its HINT is run.
+exact `GRANT USAGE ON SCHEMA ... TO PUBLIC` to run first. Event triggers on
+`REVOKE` and `DROP OWNED` protect it afterwards: `extension_drop__usage_guard`
+on `ddl_command_end` rejects (and rolls back) a command that would remove it,
+and `extension_drop__usage_guard_start` on `ddl_command_start` rejects any
+such command while PUBLIC already lacks USAGE (for example, a superuser
+bypassed the triggers, they were disabled or dropped, or the ACL arrived
+through a restore). Only that second error has the `GRANT` HINT: run it to
+recover.
 
 Granting USAGE to `PUBLIC` also exposes every other object in that schema
 that has `PUBLIC` privileges (functions are executable by `PUBLIC` by
@@ -42,8 +43,10 @@ arbitrary SQL to run later. Grant them to specific roles as needed.
   Granted to `PUBLIC` by default.
 
 - `extension_drop__registered(extension_names name[]) RETURNS name[]`
-  Returns those of `extension_names` that have registered drop commands, and
-  asserts the table is sane when there are none. `SECURITY DEFINER`, with
+  Returns those of `extension_names` that have registered drop commands. When
+  none do, it first calls `extension_drop__sanity_assert()`, so a stale row
+  raises `XD001` instead of an empty result; when some do, it does not assert
+  (the event trigger asserts after running their SQL). `SECURITY DEFINER`, with
   `search_path = pg_catalog, pg_temp` and schema-qualified references, so a role
   with CREATE on the extension's schema can't make it run their code; used by
   the event trigger so dropping an unregistered extension needs no table

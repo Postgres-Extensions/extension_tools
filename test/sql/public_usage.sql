@@ -3,8 +3,9 @@
 
 /*
  * extension_drop resolves extension_drop__registered() as whichever role drops an extension, so PUBLIC
- * must keep USAGE on its schema: install and update refuse without it, and REVOKE / DROP OWNED that
- * would remove it are rolled back.
+ * must keep USAGE on its schema: install and update refuse without it, REVOKE / DROP OWNED that would
+ * remove it are rolled back (ddl_command_end), and every REVOKE / DROP OWNED is refused up front while
+ * PUBLIC already lacks it (ddl_command_start).
  */
 SELECT plan(
   1 -- Setup: role
@@ -12,7 +13,7 @@ SELECT plan(
   + 4 -- REVOKE ALL FROM PUBLIC rejected, HINT/DETAIL capture and text
   + 1 -- REVOKE from a role other than PUBLIC
   + 3 -- DROP OWNED BY the grantor of PUBLIC's only USAGE
-  + 3 -- Guard bypassed: state message, recovery
+  + 6 -- Guard bypassed: REVOKE and DROP OWNED report the state, HINT capture and text, recovery
   + 1 -- Reinstall prerequisite: drop extension_drop
   + 3 -- Fresh install refused without PUBLIC USAGE: refused, HINT capture and text
   + 5 -- Update in a schema named x$body$y: refused, HINT capture and text, then succeeds
@@ -29,7 +30,7 @@ SELECT lives_ok(
 SELECT throws_ok(
   format('REVOKE USAGE ON SCHEMA %I FROM PUBLIC', :'extension_drop_schema')
   , '55000'
-  , format('PUBLIC lacks USAGE on schema %s, which extension_drop requires', :'qschema')
+  , format('Command would remove PUBLIC''s USAGE on schema %s, which extension_drop requires', :'qschema')
   , 'REVOKE USAGE ON SCHEMA ... FROM PUBLIC is rejected'
 );
 SELECT is(
@@ -41,7 +42,7 @@ SELECT is(
 SELECT throws_ok(
   format('REVOKE ALL ON SCHEMA %I FROM PUBLIC', :'extension_drop_schema')
   , '55000'
-  , format('PUBLIC lacks USAGE on schema %s, which extension_drop requires', :'qschema')
+  , format('Command would remove PUBLIC''s USAGE on schema %s, which extension_drop requires', :'qschema')
   , 'REVOKE ALL ON SCHEMA ... FROM PUBLIC is rejected'
 );
 SELECT lives_ok(
@@ -58,8 +59,8 @@ SELECT lives_ok(
 );
 SELECT is(
   current_setting('extension_drop_test.hint')
-  , format('Run GRANT USAGE ON SCHEMA %s TO PUBLIC. extension_drop resolves extension_drop__registered() as whichever role drops an extension, which needs USAGE on the schema.', :'qschema')
-  , 'HINT gives the GRANT and says why'
+  , ''
+  , 'No GRANT HINT: the command was prevented, nothing to fix'
 );
 SELECT is(
   current_setting('extension_drop_test.detail')
@@ -91,7 +92,7 @@ SELECT lives_ok(
 SELECT throws_ok(
   'DROP OWNED BY extension_drop_test_grantor'
   , '55000'
-  , format('PUBLIC lacks USAGE on schema %s, which extension_drop requires', :'qschema')
+  , format('Command would remove PUBLIC''s USAGE on schema %s, which extension_drop requires', :'qschema')
   , 'DROP OWNED BY the grantor of PUBLIC''s only USAGE is rejected'
 );
 SELECT lives_ok(
@@ -100,7 +101,8 @@ SELECT lives_ok(
 );
 
 /*
- * A superuser can bypass the guard; afterwards every REVOKE fails, naming the state and the fix.
+ * A superuser can bypass the guard; afterwards every REVOKE and DROP OWNED fails before running, naming the
+ * state and the fix.
  */
 SELECT lives_ok(
   format('SET LOCAL session_replication_role = replica; REVOKE USAGE ON SCHEMA %I FROM PUBLIC; RESET session_replication_role', :'extension_drop_schema')
@@ -111,6 +113,28 @@ SELECT throws_ok(
   , '55000'
   , format('PUBLIC lacks USAGE on schema %s, which extension_drop requires', :'qschema')
   , 'An unrelated REVOKE reports the missing USAGE'
+);
+SELECT lives_ok(
+  format($q$DO $d$
+  DECLARE h text;
+  BEGIN
+    REVOKE USAGE ON SCHEMA %I FROM extension_drop_test_grantor;
+  EXCEPTION WHEN object_not_in_prerequisite_state THEN
+    GET STACKED DIAGNOSTICS h = PG_EXCEPTION_HINT;
+    PERFORM set_config('extension_drop_test.hint', h, false);
+  END $d$$q$, :'extension_drop_schema')
+  , 'Capture HINT'
+);
+SELECT is(
+  current_setting('extension_drop_test.hint')
+  , format('Run GRANT USAGE ON SCHEMA %s TO PUBLIC. extension_drop resolves extension_drop__registered() as whichever role drops an extension, which needs USAGE on the schema.', :'qschema')
+  , 'HINT gives the GRANT and says why'
+);
+SELECT throws_ok(
+  'DROP OWNED BY extension_drop_test_grantor'
+  , '55000'
+  , format('PUBLIC lacks USAGE on schema %s, which extension_drop requires', :'qschema')
+  , 'DROP OWNED reports the missing USAGE'
 );
 SELECT lives_ok(
   format('GRANT USAGE ON SCHEMA %I TO PUBLIC', :'extension_drop_schema')

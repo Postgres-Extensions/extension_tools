@@ -162,7 +162,7 @@ SELECT __extension_drop.create_function(
 SELECT array(
   SELECT extension_name
     FROM @extension_schema@.extension_drop__commands c
-    WHERE NOT EXISTS(SELECT 1 FROM pg_catalog.pg_extension e WHERE e.extname = c.extension_name)
+    WHERE NOT EXISTS(SELECT 1 FROM pg_extension e WHERE e.extname = c.extension_name)
       AND extension_name IS DISTINCT FROM ignore
   )
 $body$
@@ -177,12 +177,12 @@ SELECT __extension_drop.create_function(
 DECLARE
   bad name[] := @extension_schema@.extension_drop__sanity_check(ignore);
 BEGIN
-  IF pg_catalog.array_length(bad, 1) IS NOT NULL THEN
+  IF array_length(bad, 1) IS NOT NULL THEN
     RAISE EXCEPTION 'unexpected drop commands' USING ERRCODE = 'XD001'
-      , DETAIL = pg_catalog.format(
+      , DETAIL = format(
         '%s not exist: %s'
-        , CASE WHEN pg_catalog.array_length(bad, 1) = 1 THEN 'This extension does' ELSE 'These extensions do' END
-        , pg_catalog.array_to_string(bad, ', ')
+        , CASE WHEN array_length(bad, 1) = 1 THEN 'This extension does' ELSE 'These extensions do' END
+        , array_to_string(bad, ', ')
       )
       , HINT = $$This should not happen unless someone manually inserted into "extension_drop__commands" or messed with the "extension_drop" event trigger.
   Use SELECT extension_drop__repair() to fix this.$$;
@@ -314,7 +314,7 @@ DECLARE
   );
 BEGIN
   -- With nothing registered the trigger returns without reaching its own sanity assert, so check here.
-  IF pg_catalog.array_length(ret, 1) IS NULL THEN
+  IF array_length(ret, 1) IS NULL THEN
     PERFORM @extension_schema@.extension_drop__sanity_assert(NULL::name);
   END IF;
   RETURN ret;
@@ -345,11 +345,11 @@ BEGIN
   RAISE DEBUG 'extension_drop event trigger entry: tg_event %, tg_tag %', tg_event, tg_tag;
 
   -- Most drops involve no extension; don't touch our table (or assert) for them.
-  SELECT pg_catalog.string_agg(
-          pg_catalog.format('"%s"', pg_catalog.replace(object_name, '"', '""')), ', ' ORDER BY object_name)
-      , pg_catalog.array_agg(object_name::name ORDER BY object_name)
+  SELECT string_agg(
+          format('"%s"', replace(object_name, '"', '""')), ', ' ORDER BY object_name)
+      , array_agg(object_name::name ORDER BY object_name)
     INTO dropping, dropped
-    FROM pg_catalog.pg_event_trigger_dropped_objects()
+    FROM pg_event_trigger_dropped_objects()
     WHERE object_type = 'extension';
   IF dropping IS NULL THEN
     RETURN;
@@ -364,7 +364,7 @@ BEGIN
   EXCEPTION WHEN insufficient_privilege THEN
     registered := NULL;
   END;
-  IF registered IS NOT NULL AND pg_catalog.array_length(registered, 1) IS NULL THEN
+  IF registered IS NOT NULL AND array_length(registered, 1) IS NULL THEN
     RETURN;
   END IF;
 
@@ -375,26 +375,26 @@ BEGIN
   BEGIN
     WITH del AS (
       DELETE FROM @extension_schema@.extension_drop__commands c
-        USING pg_catalog.pg_event_trigger_dropped_objects() d
+        USING pg_event_trigger_dropped_objects() d
         WHERE c.extension_name = d.object_name AND d.object_type = 'extension'
         RETURNING c.extension_name, c.sql
     )
-    SELECT pg_catalog.array_agg(extension_name), pg_catalog.array_agg(sql) INTO names, cmds FROM del;
+    SELECT array_agg(extension_name), array_agg(sql) INTO names, cmds FROM del;
   EXCEPTION WHEN insufficient_privilege THEN
     GET STACKED DIAGNOSTICS msg = MESSAGE_TEXT;
 
     -- Names are always double-quoted (embedded quotes doubled) in the primary message.
     SELECT o.owner
-        , pg_catalog.format('%I.%I', n.nspname, c.relname) AS qname
-        , (SELECT pg_catalog.array_agg(pg_catalog.format('"%s"', pg_catalog.replace(u.x, '"', '""')) ORDER BY u.ord)
-            FROM pg_catalog.unnest(ARRAY[n.nspname::text, c.relname::text, o.owner::text]) WITH ORDINALITY u(x, ord)
+        , format('%I.%I', n.nspname, c.relname) AS qname
+        , (SELECT array_agg(format('"%s"', replace(u.x, '"', '""')) ORDER BY u.ord)
+            FROM unnest(ARRAY[n.nspname::text, c.relname::text, o.owner::text]) WITH ORDINALITY u(x, ord)
           ) AS dq -- schema, table, owner
       INTO t
-      FROM pg_catalog.pg_extension e
-        JOIN pg_catalog.pg_class c
+      FROM pg_extension e
+        JOIN pg_class c
           ON c.relnamespace = e.extnamespace AND c.relname = 'extension_drop__commands'
-        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-        CROSS JOIN LATERAL (SELECT pg_catalog.pg_get_userbyid(c.relowner) AS owner) o
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        CROSS JOIN LATERAL (SELECT pg_get_userbyid(c.relowner) AS owner) o
       WHERE e.extname = 'extension_drop';
     IF NOT FOUND THEN
       RAISE;
@@ -404,18 +404,18 @@ BEGIN
         , t.dq[1], t.dq[2], t.dq[3], dropping
       USING ERRCODE = 'insufficient_privilege'
         , DETAIL = msg
-        , HINT = pg_catalog.format(
+        , HINT = format(
             'Run the drop as role %s or a superuser, or grant SELECT, DELETE on %s to the current role.'
-            , pg_catalog.quote_ident(t.owner), t.qname);
+            , quote_ident(t.owner), t.qname);
   END;
 
   /*
    * Registered SQL runs with path pg_catalog, <our schema>, pg_temp. The pin is restored right after so
    * the rest of this function never sees our schema (the function-exit restore covers an error).
    */
-  FOR i IN 1 .. COALESCE(pg_catalog.array_length(cmds, 1), 0) LOOP
+  FOR i IN 1 .. COALESCE(array_length(cmds, 1), 0) LOOP
     RAISE DEBUG E'extension "%" is being dropped; executing SQL:\n%', names[i], cmds[i];
-    PERFORM pg_catalog.set_config('search_path', pg_catalog.format('pg_catalog, %s, pg_temp', @extension_schema_literal@), true);
+    PERFORM set_config('search_path', format('pg_catalog, %s, pg_temp', @extension_schema_literal@), true);
     EXECUTE cmds[i];
     PERFORM pg_catalog.set_config('search_path', 'pg_catalog, pg_temp', true);
   END LOOP;
@@ -438,7 +438,8 @@ CREATE EVENT TRIGGER extension_drop
 ;
 
 /*
- * REVOKE GUARD
+ * USAGE GUARD: the start trigger refuses any REVOKE / DROP OWNED while PUBLIC already lacks USAGE (the
+ * only error that gives the GRANT); the end trigger refuses a command that just removed it.
  */
 SELECT __extension_drop.create_function(
   'extension_drop__usage_guard'
@@ -446,21 +447,31 @@ SELECT __extension_drop.create_function(
   , 'event_trigger LANGUAGE plpgsql'
   , $body$
 DECLARE
-  ns oid := (SELECT e.extnamespace FROM pg_catalog.pg_extension e WHERE e.extname = 'extension_drop');
+  ns oid := (SELECT e.extnamespace FROM pg_extension e WHERE e.extname = 'extension_drop');
   nsname text;
 BEGIN
   -- Not installed any more (e.g. DROP OWNED dropped it): nothing to protect.
-  IF ns IS NOT NULL AND NOT pg_catalog.has_schema_privilege('public', ns, 'USAGE') THEN
-    nsname := (SELECT pg_catalog.quote_ident(n.nspname) FROM pg_catalog.pg_namespace n WHERE n.oid = ns);
-    RAISE EXCEPTION 'PUBLIC lacks USAGE on schema %, which extension_drop requires', nsname
+  IF ns IS NOT NULL AND NOT has_schema_privilege('public', ns, 'USAGE') THEN
+    nsname := (SELECT quote_ident(n.nspname) FROM pg_namespace n WHERE n.oid = ns);
+    IF tg_event = 'ddl_command_start' THEN
+      RAISE EXCEPTION 'PUBLIC lacks USAGE on schema %, which extension_drop requires', nsname
+        USING ERRCODE = 'object_not_in_prerequisite_state'
+          , HINT = format('Run GRANT USAGE ON SCHEMA %s TO PUBLIC. extension_drop resolves extension_drop__registered() as whichever role drops an extension, which needs USAGE on the schema.', nsname);
+    END IF;
+    RAISE EXCEPTION 'Command would remove PUBLIC''s USAGE on schema %, which extension_drop requires', nsname
       USING ERRCODE = 'object_not_in_prerequisite_state'
-        , DETAIL = pg_catalog.format('DDL command: %s', tg_tag)
-        , HINT = pg_catalog.format('Run GRANT USAGE ON SCHEMA %s TO PUBLIC. extension_drop resolves extension_drop__registered() as whichever role drops an extension, which needs USAGE on the schema.', nsname);
+        , DETAIL = format('DDL command: %s', tg_tag);
   END IF;
 END
 $body$
   , 'Event trigger function that stops PUBLIC losing USAGE on the schema extension_drop is installed in.'
 );
+
+CREATE EVENT TRIGGER extension_drop__usage_guard_start
+  ON ddl_command_start
+  WHEN tag IN( 'REVOKE', 'DROP OWNED' ) -- NOTE! This MUST be IN
+  EXECUTE PROCEDURE extension_drop__usage_guard()
+;
 
 CREATE EVENT TRIGGER extension_drop__usage_guard
   ON ddl_command_end
