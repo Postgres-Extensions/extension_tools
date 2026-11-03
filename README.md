@@ -23,7 +23,8 @@ Two event triggers on `REVOKE` and `DROP OWNED` protect it afterwards:
   bypassed the triggers, they were disabled or dropped, or the ACL arrived
   through a restore.
 
-Only the second error has the `GRANT` HINT. Run it to recover.
+Only the `extension_drop__usage_guard_start` error has the `GRANT` HINT for
+recovering; run it.
 
 Granting USAGE to `PUBLIC` also exposes every other object in that schema
 that has `PUBLIC` privileges (functions are executable by `PUBLIC` by
@@ -96,15 +97,13 @@ so does the registered SQL: it runs, as the dropping role, under the event
 trigger's own pinned path. **Registered SQL must schema-qualify everything it
 uses**: tables and functions in any schema (including cat_tools and
 extension_drop's own functions). extension_drop's schema is whatever it was
-installed into, so look it up and build the reference with `%s` (not `%I`:
-`regnamespace` output is already quoted):
+installed into, so when registering, look it up and interpolate it with `%s`
+(not `%I`: `regnamespace` output is already quoted):
 
-    SELECT format('SELECT %s.extension_drop__get(%L)',
-                  extnamespace::regnamespace, 'my_extension')
-      FROM pg_extension WHERE extname = 'extension_drop' \gexec
-
-`\gexec` (psql) runs the statement that was built; without it the query
-only returns the SQL as text.
+    SELECT extension_drop__add('my_extension',
+             format('SELECT %s.extension_drop__get(%L)',
+                    extnamespace::regnamespace, 'my_extension'))
+      FROM pg_extension WHERE extname = 'extension_drop';
 
 Nothing but `pg_catalog` and `pg_temp` is on the registered SQL's path, so a
 role with CREATE on any schema can't plant objects that it resolves.
