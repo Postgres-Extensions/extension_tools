@@ -1,28 +1,22 @@
 \set ECHO none
-1..30
+1..22
 ok 1 - Create role
 ok 2 - REVOKE USAGE ON SCHEMA ... FROM PUBLIC is rejected
 ok 3 - PUBLIC still has USAGE
 ok 4 - REVOKE ALL ON SCHEMA ... FROM PUBLIC is rejected
-ok 5 - Capture HINT and DETAIL
-ok 6 - No GRANT HINT: the command was prevented, nothing to fix
-ok 7 - DETAIL explains the requirement and names the command
-ok 8 - REVOKE from a role other than PUBLIC is allowed
-ok 9 - PUBLIC keeps USAGE through the grantor's own grant
-ok 10 - DROP OWNED BY the grantor of PUBLIC's only USAGE is rejected
-ok 11 - DROP OWNED BY the grantor is allowed once PUBLIC has USAGE from the owner
-ok 12 - Remove PUBLIC's USAGE with event triggers bypassed
-ok 13 - An unrelated REVOKE reports the missing USAGE
-ok 14 - Capture HINT
-ok 15 - HINT gives the GRANT
-ok 16 - DETAIL explains the requirement and names the command
-ok 17 - DROP OWNED reports the missing USAGE
-ok 18 - The GRANT in the HINT recovers
-ok 19 - Drop extension_drop
-ok 20 - Install into a schema without PUBLIC USAGE fails
-ok 21 - Capture HINT
-ok 22 - HINT gives the exact GRANT
-ok 23 - DETAIL explains the requirement
+ok 5 - HINT is empty and DETAIL explains the requirement and names the command
+ok 6 - REVOKE from a role other than PUBLIC is allowed
+ok 7 - PUBLIC keeps USAGE through the grantor's own grant
+ok 8 - DROP OWNED BY the grantor of PUBLIC's only USAGE is rejected
+ok 9 - DROP OWNED BY the grantor is allowed once PUBLIC has USAGE from the owner
+ok 10 - Remove PUBLIC's USAGE with event triggers bypassed
+ok 11 - An unrelated REVOKE reports the missing USAGE
+ok 12 - HINT gives the GRANT; DETAIL explains the requirement and names the command
+ok 13 - DROP OWNED reports the missing USAGE
+ok 14 - The GRANT in the HINT recovers
+ok 15 - Drop extension_drop
+ok 16 - Install into a schema without PUBLIC USAGE fails
+ok 17 - HINT gives the exact GRANT; DETAIL explains the requirement
 WARNING:  function__arg_types_text() is deprecated, use routine__parse_arg_types_text instead
 WARNING:  function__arg_types_text() is deprecated, use routine__parse_arg_types_text instead
 WARNING:  function__arg_types_text() is deprecated, use routine__parse_arg_types_text instead
@@ -31,11 +25,9 @@ WARNING:  function__arg_types_text() is deprecated, use routine__parse_arg_types
 WARNING:  function__arg_types_text() is deprecated, use routine__parse_arg_types_text instead
 WARNING:  function__arg_types_text() is deprecated, use routine__parse_arg_types_text instead
 WARNING:  function__arg_types_text() is deprecated, use routine__parse_arg_types_text instead
-ok 24 - Update of an install without PUBLIC USAGE fails
-ok 25 - Capture HINT
-ok 26 - HINT gives the exact GRANT
-ok 27 - DETAIL explains the requirement
-ok 28 - Update succeeds once PUBLIC has USAGE, in a schema named x$body$y
-ok 29 - Updated to the current version
-ok 30 - extension_drop's schema should not be reachable via search_path
+ok 18 - Update of an install without PUBLIC USAGE fails
+ok 19 - HINT gives the exact GRANT; DETAIL explains the requirement
+ok 20 - Update succeeds once PUBLIC has USAGE, in a schema named x$body$y
+ok 21 - Updated to the current version
+ok 22 - extension_drop's schema should not be reachable via search_path
 # TRANSACTION INTENTIONALLY LEFT OPEN!

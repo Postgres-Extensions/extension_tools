@@ -39,4 +39,20 @@ WHERE x.extname = 'extension_drop'
 \set TT extension_drop_test_table
 CREATE TEMP TABLE :TT (i int);
 
+/*
+ * Runs sql and returns the message, DETAIL and HINT of the error it raises when that error's SQLSTATE is
+ * `state`; returns no rows if it raises nothing. Any other error propagates.
+ */
+CREATE FUNCTION pg_temp.xd_capture(sql text, state text)
+RETURNS TABLE(message text, detail text, hint text) LANGUAGE plpgsql AS $f$
+BEGIN
+  EXECUTE sql;
+EXCEPTION WHEN OTHERS THEN
+  IF SQLSTATE <> state THEN
+    RAISE;
+  END IF;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT, detail = PG_EXCEPTION_DETAIL, hint = PG_EXCEPTION_HINT;
+  RETURN NEXT;
+END $f$;
+
 -- vi: expandtab ts=2 sw=2

@@ -1,6 +1,7 @@
 \set ECHO none
 \i test/pgxntool/setup.sql
 
+-- Own file: plpgsql caches resolved plans per session, so every caller must first run after the overload is planted.
 /*
  * A role with CREATE on extension_drop's schema can plant a zero-argument extension_drop__sanity_assert()
  * next to the real one; every call must pass the argument explicitly or it becomes ambiguous. plpgsql keeps
@@ -8,11 +9,10 @@
  * this file's own session: a caller that already ran in the session would hide a missing argument.
  */
 SELECT plan(
-  2 -- Setup: role, plant the overload
-  + 1 -- CREATE EXTENSION of a registering extension (extension_drop__add)
-  + 1 -- extension_drop__get
-  + 1 -- DROP EXTENSION of a registered extension (event trigger, extension_drop__claim)
-  + 2 -- DROP EXTENSION of an unregistered extension (claim with nothing registered)
+  2 -- setup
+  + 3 -- registered extension: create, get, drop
+  + 2 -- unregistered extension: remove, drop
+
   + 1 -- extension_drop's schema should not be on search_path (test/finish.sql)
 );
 

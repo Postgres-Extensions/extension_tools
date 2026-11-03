@@ -8,15 +8,11 @@
  * PUBLIC already lacks it (ddl_command_start).
  */
 SELECT plan(
-  1 -- Setup: role
-  + 2 -- REVOKE USAGE FROM PUBLIC rejected, state unchanged
-  + 4 -- REVOKE ALL FROM PUBLIC rejected, HINT/DETAIL capture and text
-  + 1 -- REVOKE from a role other than PUBLIC
-  + 3 -- DROP OWNED BY the grantor of PUBLIC's only USAGE
-  + 7 -- Guard bypassed: REVOKE and DROP OWNED report the state, HINT capture and text, DETAIL, recovery
-  + 1 -- Reinstall prerequisite: drop extension_drop
-  + 4 -- Fresh install refused without PUBLIC USAGE: refused, HINT capture and text, DETAIL
-  + 6 -- Update in a schema named x$body$y: refused, HINT capture and text, DETAIL, then succeeds
+  1 -- setup
+  + 8 -- REVOKE and DROP OWNED rejected, state unchanged
+  + 5 -- guard bypassed: REVOKE and DROP OWNED refused up front, recovery
+  + 7 -- reinstall; install and update refused without PUBLIC USAGE
+
   + 1 -- extension_drop's schema should not be on search_path (test/finish.sql)
 );
 
@@ -29,16 +25,9 @@ SELECT format('cannot remove USAGE on schema %s from PUBLIC', :'dqschema') AS re
   , format('Run GRANT USAGE ON SCHEMA %s TO PUBLIC.', :'qschema') AS lacks_hint
 \gset
 
--- Runs sql and stores the HINT and DETAIL of the USAGE error it raises in extension_drop_test.hint / .detail
-CREATE FUNCTION pg_temp.xd_capture(sql text) RETURNS void LANGUAGE plpgsql AS $f$
-DECLARE h text; d text;
-BEGIN
-  EXECUTE sql;
-EXCEPTION WHEN object_not_in_prerequisite_state THEN
-  GET STACKED DIAGNOSTICS h = PG_EXCEPTION_HINT, d = PG_EXCEPTION_DETAIL;
-  PERFORM set_config('extension_drop_test.hint', h, false);
-  PERFORM set_config('extension_drop_test.detail', d, false);
-END $f$;
+-- The query returning the HINT and DETAIL of the USAGE error (55000) that sql raises
+SELECT $$SELECT hint, detail FROM pg_temp.xd_capture(%L, '55000')$$ AS capture_query
+\gset
 
 SELECT lives_ok(
   'CREATE ROLE extension_drop_test_grantor'
@@ -51,6 +40,7 @@ SELECT throws_ok(
   , :'removal_msg'
   , 'REVOKE USAGE ON SCHEMA ... FROM PUBLIC is rejected'
 );
+-- Not schema_privs_are(): it asserts PUBLIC's exact privilege set, and in existing mode PUBLIC may also have CREATE
 SELECT is(
   has_schema_privilege('public', :'extension_drop_schema', 'USAGE')
   , true
@@ -63,19 +53,11 @@ SELECT throws_ok(
   , :'removal_msg'
   , 'REVOKE ALL ON SCHEMA ... FROM PUBLIC is rejected'
 );
-SELECT lives_ok(
-  format('SELECT pg_temp.xd_capture(%L)', format($q$REVOKE USAGE ON SCHEMA %I FROM PUBLIC$q$, :'extension_drop_schema'))
-  , 'Capture HINT and DETAIL'
-);
-SELECT is(
-  current_setting('extension_drop_test.hint')
-  , ''
-  , 'No GRANT HINT: the command was prevented, nothing to fix'
-);
-SELECT is(
-  current_setting('extension_drop_test.detail')
-  , 'extension_drop requires PUBLIC to have USAGE on the schema it is installed in. DDL command: REVOKE'
-  , 'DETAIL explains the requirement and names the command'
+-- No GRANT HINT: the command was prevented, nothing to fix
+SELECT results_eq(
+  format(:'capture_query', format('REVOKE USAGE ON SCHEMA %I FROM PUBLIC', :'extension_drop_schema'))
+  , $$VALUES ('', 'extension_drop requires PUBLIC to have USAGE on the schema it is installed in. DDL command: REVOKE')$$
+  , 'HINT is empty and DETAIL explains the requirement and names the command'
 );
 
 -- Only PUBLIC's USAGE matters
@@ -124,19 +106,10 @@ SELECT throws_ok(
   , :'lacks_msg'
   , 'An unrelated REVOKE reports the missing USAGE'
 );
-SELECT lives_ok(
-  format('SELECT pg_temp.xd_capture(%L)', format($q$REVOKE USAGE ON SCHEMA %I FROM extension_drop_test_grantor$q$, :'extension_drop_schema'))
-  , 'Capture HINT'
-);
-SELECT is(
-  current_setting('extension_drop_test.hint')
-  , :'lacks_hint'
-  , 'HINT gives the GRANT'
-);
-SELECT is(
-  current_setting('extension_drop_test.detail')
-  , 'extension_drop requires PUBLIC to have USAGE on the schema it is installed in. DDL command: REVOKE'
-  , 'DETAIL explains the requirement and names the command'
+SELECT results_eq(
+  format(:'capture_query', format('REVOKE USAGE ON SCHEMA %I FROM extension_drop_test_grantor', :'extension_drop_schema'))
+  , format($$VALUES (%L, 'extension_drop requires PUBLIC to have USAGE on the schema it is installed in. DDL command: REVOKE')$$, :'lacks_hint')
+  , 'HINT gives the GRANT; DETAIL explains the requirement and names the command'
 );
 SELECT throws_ok(
   'DROP OWNED BY extension_drop_test_grantor'
@@ -167,19 +140,12 @@ SELECT throws_ok(
   , 'cannot install extension_drop in schema "xd no usage"'
   , 'Install into a schema without PUBLIC USAGE fails'
 );
-SELECT lives_ok(
-  format('SELECT pg_temp.xd_capture(%L)', $q$CREATE EXTENSION extension_drop SCHEMA "xd no usage"$q$)
-  , 'Capture HINT'
-);
-SELECT is(
-  current_setting('extension_drop_test.hint')
-  , 'Run GRANT USAGE ON SCHEMA "xd no usage" TO PUBLIC (creating the schema first if needed), then retry.'
-  , 'HINT gives the exact GRANT'
-);
-SELECT is(
-  current_setting('extension_drop_test.detail')
-  , 'extension_drop requires PUBLIC to have USAGE on the schema it is installed in.'
-  , 'DETAIL explains the requirement'
+SELECT results_eq(
+  format(:'capture_query', $q$CREATE EXTENSION extension_drop SCHEMA "xd no usage"$q$)
+  , $$VALUES (
+    'Run GRANT USAGE ON SCHEMA "xd no usage" TO PUBLIC (creating the schema first if needed), then retry.'
+    , 'extension_drop requires PUBLIC to have USAGE on the schema it is installed in.')$$
+  , 'HINT gives the exact GRANT; DETAIL explains the requirement'
 );
 
 -- The 0.1.1 install script predates the requirement; the update must enforce it, and cope with any schema name
@@ -197,25 +163,19 @@ SELECT throws_ok(
   , 'cannot update extension_drop in schema "x$body$y"'
   , 'Update of an install without PUBLIC USAGE fails'
 );
-SELECT lives_ok(
-  format('SELECT pg_temp.xd_capture(%L)', $q$ALTER EXTENSION extension_drop UPDATE$q$)
-  , 'Capture HINT'
-);
-SELECT is(
-  current_setting('extension_drop_test.hint')
-  , 'Run GRANT USAGE ON SCHEMA "x$body$y" TO PUBLIC (creating the schema first if needed), then retry.'
-  , 'HINT gives the exact GRANT'
-);
-SELECT is(
-  current_setting('extension_drop_test.detail')
-  , 'extension_drop requires PUBLIC to have USAGE on the schema it is installed in.'
-  , 'DETAIL explains the requirement'
+SELECT results_eq(
+  format(:'capture_query', $q$ALTER EXTENSION extension_drop UPDATE$q$)
+  , $$VALUES (
+    'Run GRANT USAGE ON SCHEMA "x$body$y" TO PUBLIC (creating the schema first if needed), then retry.'
+    , 'extension_drop requires PUBLIC to have USAGE on the schema it is installed in.')$$
+  , 'HINT gives the exact GRANT; DETAIL explains the requirement'
 );
 GRANT USAGE ON SCHEMA "x$body$y" TO PUBLIC;
 SELECT lives_ok(
   'ALTER EXTENSION extension_drop UPDATE'
   , 'Update succeeds once PUBLIC has USAGE, in a schema named x$body$y'
 );
+-- pgTAP has no assertion for an extension's installed version
 SELECT is(
   (SELECT extversion FROM pg_extension WHERE extname = 'extension_drop')
   , (SELECT default_version FROM pg_available_extensions WHERE name = 'extension_drop')

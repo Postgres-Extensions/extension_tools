@@ -4,26 +4,20 @@
 /*
  * Dropping an extension needs no privileges on extension_drop's registration table, for the three commands
  * the trigger fires for, whether or not the extension is registered. Also covered: registered SQL runs as
- * the dropping role, and a stale registration still raises XD001. Each scenario ends with
- * ROLLBACK TO SAVEPOINT base; the file's single open transaction makes that possible.
+ * the dropping role, XD001 for a stale registration (and its text), and drops involving no extension. Each
+ * scenario ends with ROLLBACK TO SAVEPOINT base; the file's single open transaction makes that possible.
  */
 SELECT plan(
-  1 -- Setup: role
-  + 1 -- Setup: schema with registered extension
-  + 1 -- Setup: registered SQL records current_user
-  + 1 -- The role holds no table privileges
-  + 3 -- Registered: DROP SCHEMA CASCADE
-  + 3 -- Registered: DROP OWNED BY
-  + 1 -- Unregistered: DROP SCHEMA CASCADE
-  + 1 -- Unregistered: DROP OWNED BY
-  + 5 -- DROP EXTENSION by the extension's non-superuser owner, registered and not
-  + 2 -- Registered SQL fails with its own privilege error
-  + 2 -- Stale registration: registered and unregistered
-  + 3 -- Calling extension_drop__claim outside the event trigger
-  + 3 -- Temp table shadowing extension_drop__commands
-  + 3 -- Member functions: count, pins, SECURITY DEFINER
-  + 6 -- Planted operators: claim path as a role, claim path with a stale row
-  + 4 -- Planted operators: invoker paths run by a superuser
+  4 -- setup, table privileges
+  + 8 -- DROP SCHEMA CASCADE and DROP OWNED BY, registered and not
+  + 5 -- DROP EXTENSION by the owner
+  + 4 -- registered SQL's own error, stale registration
+  + 5 -- XD001 text
+  + 6 -- drops involving no extension
+  + 6 -- claim outside the trigger, temp table of the same name
+  + 12 -- member functions
+  + 10 -- planted operators
+
   + 1 -- extension_drop's schema should not be on search_path (test/finish.sql)
 );
 
@@ -35,6 +29,8 @@ SET client_min_messages = ERROR;
 \set DROP_EXTENSION 'DO $$ BEGIN SET LOCAL ROLE extension_drop_test_owner; DROP EXTENSION extension_drop_test; RESET ROLE; END $$'
 \set RECREATE 'CREATE SCHEMA extension_drop_test_plain_schema AUTHORIZATION extension_drop_test_plain; CREATE EXTENSION extension_drop_test SCHEMA extension_drop_test_plain_schema'
 \set UNREGISTER 'SELECT ' :"extension_drop_schema" '.extension_drop__remove(''extension_drop_test'')'
+\set CAPTURE_XD001 'SELECT message, detail, hint FROM pg_temp.xd_capture(%L, ''XD001'')'
+\set SANITY_ASSERT 'SELECT ' :"extension_drop_schema" '.extension_drop__sanity_assert()'
 
 -- The registered SQL, as the three statements the tests below need it in
 SELECT format($$SELECT %I.extension_drop__update('extension_drop_test', %L)$$
@@ -43,7 +39,6 @@ SELECT format($$SELECT %I.extension_drop__update('extension_drop_test', 'CREATE 
     , :'extension_drop_schema') AS "NEEDS_CREATEROLE" \gset
 SELECT format($$INSERT INTO %I.extension_drop__commands VALUES('extension_drop_test_stale', 'SELECT 1')$$
     , :'extension_drop_schema') AS "INSERT_STALE" \gset
-SELECT format('SELECT count(*)::int FROM %I.extension_drop__commands', :'extension_drop_schema') AS "COUNT_REGISTERED" \gset
 
 DO $$ BEGIN PERFORM set_config('extension_drop_test.ran_as', 'none', false); END $$;
 
@@ -60,11 +55,8 @@ SELECT lives_ok(
   :'RECORD_ROLE'
   , 'Register SQL that records current_user'
 );
-SELECT is(
-  (SELECT bool_or(has_table_privilege('extension_drop_test_plain', c.oid, p))
-    FROM pg_class c, unnest('{SELECT,INSERT,UPDATE,DELETE}'::text[]) p
-    WHERE c.oid = format('%I.extension_drop__commands', :'extension_drop_schema')::regclass)
-  , false
+SELECT table_privs_are(
+  :'extension_drop_schema', 'extension_drop__commands', 'extension_drop_test_plain', '{}'::name[]
   , 'The role has no privileges on extension_drop__commands'
 );
 
@@ -170,6 +162,76 @@ SELECT throws_ok(
 );
 ROLLBACK TO SAVEPOINT base;
 
+/*
+ * Every path that raises XD001 gives the same message, DETAIL and HINT: sanity_assert, which both
+ * extension_drop__get() and the event trigger (via extension_drop__claim) raise from.
+ */
+SELECT lives_ok(:'INSERT_STALE', 'Insert a stale registration');
+SELECT results_eq(
+  format(:'CAPTURE_XD001', :'SANITY_ASSERT')
+  , $$VALUES (
+    'unexpected drop commands'
+    , 'This extension does not exist: extension_drop_test_stale'
+    , E'This should not happen unless someone manually inserted into "extension_drop__commands" or messed with the "extension_drop" event trigger.\n  Use SELECT extension_drop__repair() to fix this.')$$
+  , 'sanity_assert raises XD001 with the expected message, DETAIL and HINT'
+);
+SELECT results_eq(
+  format(:'CAPTURE_XD001', 'DROP EXTENSION extension_drop_test')
+  , format(:'CAPTURE_XD001', :'SANITY_ASSERT')
+  , 'The event trigger raises the same message, DETAIL and HINT'
+);
+SELECT lives_ok(
+  replace(:'INSERT_STALE', 'extension_drop_test_stale', 'extension_drop_test_stale2')
+  , 'Insert a second stale registration'
+);
+-- Names come out in no particular order
+SELECT matches(
+  (SELECT detail FROM pg_temp.xd_capture(:'SANITY_ASSERT', 'XD001'))
+  , '^These extensions do not exist: (extension_drop_test_stale, extension_drop_test_stale2|extension_drop_test_stale2, extension_drop_test_stale)$'
+  , 'Plural DETAIL names both stale extensions'
+);
+ROLLBACK TO SAVEPOINT base;
+
+/*
+ * Drops involving no extension must not depend on the caller's privileges or on the state of
+ * extension_drop__commands.
+ */
+SELECT lives_ok(
+  :'UNREGISTER' || '; DROP EXTENSION extension_drop_test'
+  , 'Drop the extension so the drops below involve none'
+);
+SELECT lives_ok(
+  $q$DO $$ BEGIN
+    CREATE SCHEMA extension_drop_test_unrelated AUTHORIZATION extension_drop_test_plain
+      CREATE TABLE t(i int);
+    SET LOCAL ROLE extension_drop_test_plain;
+    DROP SCHEMA extension_drop_test_unrelated CASCADE;
+    RESET ROLE;
+  END $$$q$
+  , 'Non-superuser DROP SCHEMA CASCADE of a schema with no extension'
+);
+SELECT lives_ok(
+  $q$DO $$ BEGIN
+    CREATE SCHEMA extension_drop_test_unrelated AUTHORIZATION extension_drop_test_plain
+      CREATE TABLE t(i int);
+    SET LOCAL ROLE extension_drop_test_plain;
+    DROP OWNED BY extension_drop_test_plain;
+    RESET ROLE;
+  END $$$q$
+  , 'Non-superuser DROP OWNED BY with no extension'
+);
+SELECT lives_ok(:'INSERT_STALE', 'Insert a stale registration');
+SELECT results_eq(
+  format($$SELECT %I.extension_drop__sanity_check()$$, :'extension_drop_schema')
+  , $$SELECT '{extension_drop_test_stale}'::name[]$$
+  , 'Stale registration is present'
+);
+SELECT lives_ok(
+  $$CREATE SCHEMA extension_drop_test_su_schema; DROP SCHEMA extension_drop_test_su_schema$$
+  , 'Superuser DROP SCHEMA with stale registration'
+);
+ROLLBACK TO SAVEPOINT base;
+
 -- Called directly, claim must delete nothing: pg_event_trigger_dropped_objects() refuses outside the trigger
 SELECT throws_ok(
   format('SELECT * FROM %I.extension_drop__claim()', :'extension_drop_schema')
@@ -183,9 +245,8 @@ SELECT throws_ok(
   , 'pg_event_trigger_dropped_objects() can only be called in a sql_drop event trigger function'
   , 'extension_drop__claim outside the event trigger fails for a plain role'
 );
-SELECT is(
-  (:COUNT_REGISTERED)
-  , 1
+SELECT isnt_empty(
+  format($$SELECT 1 FROM %I.extension_drop__commands WHERE extension_name = 'extension_drop_test'$$, :'extension_drop_schema')
   , 'The extension is still registered'
 );
 
@@ -215,29 +276,29 @@ ROLLBACK TO SAVEPOINT base;
  * Every function runs with a pinned search_path, and only extension_drop__claim is SECURITY DEFINER (so
  * the event trigger, and everything it runs, is the dropping role's own).
  */
+-- Counted via pg_depend: in existing mode the schema may hold other objects, so functions_are() can't be used
 SELECT is(
   (SELECT count(*)::int FROM pg_depend d
     WHERE d.classid = 'pg_proc'::regclass AND d.refclassid = 'pg_extension'::regclass AND d.deptype = 'e'
       AND d.refobjid = (SELECT e.oid FROM pg_extension e WHERE e.extname = 'extension_drop'))
-  , 10 -- member functions; a new one must be added here (and so gets its pin checked)
+  , 10 -- member functions; a new one must be added here and to the list below (so its pin and definer-ness are checked)
   , 'extension_drop has the expected number of member functions'
 );
-SELECT is(
-  (SELECT count(*)::int FROM pg_depend d JOIN pg_proc p ON p.oid = d.objid
+-- pgTAP has no assertion for proconfig
+SELECT is_empty(
+  $$SELECT p.proname FROM pg_depend d JOIN pg_proc p ON p.oid = d.objid
     WHERE d.classid = 'pg_proc'::regclass AND d.refclassid = 'pg_extension'::regclass AND d.deptype = 'e'
       AND d.refobjid = (SELECT e.oid FROM pg_extension e WHERE e.extname = 'extension_drop')
-      AND p.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, pg_temp'])
-  , 0
+      AND p.proconfig IS DISTINCT FROM ARRAY['search_path=pg_catalog, pg_temp']$$
   , 'Every extension_drop function pins search_path to pg_catalog, pg_temp'
 );
-SELECT is(
-  (SELECT array_agg(p.proname::text ORDER BY p.proname) FROM pg_depend d JOIN pg_proc p ON p.oid = d.objid
-    WHERE d.classid = 'pg_proc'::regclass AND d.refclassid = 'pg_extension'::regclass AND d.deptype = 'e'
-      AND d.refobjid = (SELECT e.oid FROM pg_extension e WHERE e.extname = 'extension_drop')
-      AND p.prosecdef)
-  , ARRAY['extension_drop__claim']
-  , 'Only extension_drop__claim is SECURITY DEFINER'
-);
+SELECT is_definer(:'extension_drop_schema', 'extension_drop__claim', 'extension_drop__claim is SECURITY DEFINER');
+SELECT isnt_definer(:'extension_drop_schema', n, n || ' is SECURITY INVOKER')
+  FROM unnest(ARRAY[
+    'extension_drop__sanity_check', 'extension_drop__sanity_assert', 'extension_drop__repair', 'extension_drop__get'
+    , 'extension_drop__add', 'extension_drop__remove', 'extension_drop__update', 'extension_drop__event_trigger'
+    , 'extension_drop__usage_guard'
+  ]::name[]) n;
 
 /*
  * A role with CREATE on extension_drop's schema must not be able to run code as anyone who calls into it.

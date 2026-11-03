@@ -1,15 +1,56 @@
 \set ECHO none
-1..12
+1..53
 ok 1 - Insert into extension_drop_test_table
 ok 2 - Create test extension
-ok 3 - Verify extension_drop__get()
-ok 4 - Drop test extension
-ok 5 - extension_drop_test_table is empty
-ok 6 - Create test extension again
-ok 7 - Drop extension command
-ok 8 - Add extension command
-ok 9 - Dropping extension with bad command should fail
-ok 10 - Drop extension command
-ok 11 - Drop test extension
-ok 12 - extension_drop's schema should not be reachable via search_path
+ok 3 - Create second test extension
+ok 4 - Verify extension_drop__get()
+ok 5 - Drop both test extensions with one command
+ok 6 - extension_drop_test_table is empty
+ok 7 - Create test extension again
+ok 8 - Drop extension command
+ok 9 - Add extension command
+ok 10 - Dropping extension with bad command should fail
+ok 11 - Drop extension command
+ok 12 - Drop test extension
+ok 13 - Create role
+ok 14 - Create schema
+ok 15 - Insert into extension_drop_test_table
+ok 16 - Create test extension as role
+ok 17 - Verify extension_drop__get()
+ok 18 - Drop owned
+ok 19 - Test extension does not exist
+ok 20 - extension_drop_test_table is empty
+ok 21 - No stale registration
+ok 22 - Create test extension
+ok 23 - Test extension exists
+ok 24 - Drop test extension
+ok 25 - Test extension does not exist
+ok 26 - Insert into extension_drop_test_table
+ok 27 - Create test extension in schema
+ok 28 - Verify extension_drop__get()
+ok 29 - Drop schema cascade
+ok 30 - Test extension does not exist
+ok 31 - extension_drop_test_table is empty
+ok 32 - No stale registration
+ok 33 - Create test extension
+ok 34 - Test extension exists
+ok 35 - Drop test extension
+ok 36 - Test extension does not exist
+ok 37 - Create recording table
+ok 38 - Create extension_drop_test_b
+ok 39 - Create extension_drop_test
+ok 40 - Register recording SQL for extension_drop_test_b
+ok 41 - Register recording SQL for extension_drop_test
+ok 42 - Drop both extensions with one command
+ok 43 - Every registered SQL ran, each starting under the pinned search_path
+ok 44 - Registrations removed
+ok 45 - Register SQL that calls extension_drop__claim()
+ok 46 - Drop extension_drop_test only
+ok 47 - The nested claim returned no rows, under the pinned search_path
+ok 48 - The surviving extension keeps its registration
+ok 49 - Update extension_drop_test registration
+ok 50 - Update left the other registration unchanged
+ok 51 - Remove extension_drop_test registration
+ok 52 - Remove left the other registration in place
+ok 53 - extension_drop's schema should not be reachable via search_path
 # TRANSACTION INTENTIONALLY LEFT OPEN!
