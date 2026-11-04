@@ -23,7 +23,7 @@ SELECT plan(
   -- Several registered extensions
   + 5 -- setup
   + 3 -- DROP EXTENSION naming both
-  + 4 -- nested extension_drop__claim()
+  + 4 -- nested _extension_drop__dropping()
   + 4 -- extension_drop__update() and extension_drop__remove()
 
   + 1 -- extension_drop's schema should not be on search_path (test/finish.sql)
@@ -143,7 +143,7 @@ ROLLBACK TO SAVEPOINT clean;
 /*
  * One command dropping several registered extensions runs every registered SQL, each under the event
  * trigger's pinned search_path (an earlier one changing it must not leak into the next), and removes every
- * registration. A registered SQL that calls extension_drop__claim() again can't claim a surviving
+ * registration. A registered SQL that calls _extension_drop__dropping() again can't remove a surviving
  * extension's registration. With two extensions registered, extension_drop__update() and
  * extension_drop__remove() touch only the named one.
  */
@@ -190,18 +190,18 @@ SELECT lives_ok(
   format($$SELECT %I.extension_drop__update('extension_drop_test', %L)$$
     , :'extension_drop_schema'
     , format($s$INSERT INTO pg_temp.extension_drop_test_ran(name, path)
-      SELECT CASE WHEN EXISTS (SELECT 1 FROM %I.extension_drop__claim())
-          THEN 'nested claim returned rows' ELSE 'nested claim returned nothing' END
+      SELECT CASE WHEN EXISTS (SELECT 1 FROM %I._extension_drop__dropping())
+          THEN 'nested dropping call returned rows' ELSE 'nested dropping call returned nothing' END
         , current_setting('search_path')$s$
       , :'extension_drop_schema'))
-  , 'Register SQL that calls extension_drop__claim()'
+  , 'Register SQL that calls _extension_drop__dropping()'
 );
 
 SELECT lives_ok('DROP EXTENSION extension_drop_test', 'Drop extension_drop_test only');
 SELECT bag_eq(
   'SELECT name, path FROM extension_drop_test_ran'
-  , $$VALUES ('nested claim returned nothing', 'pg_catalog, pg_temp')$$
-  , 'The nested claim returned no rows, under the pinned search_path'
+  , $$VALUES ('nested dropping call returned nothing', 'pg_catalog, pg_temp')$$
+  , 'The nested dropping call returned no rows, under the pinned search_path'
 );
 SELECT results_eq(
   format('SELECT extension_name, sql FROM %I.extension_drop__commands', :'extension_drop_schema')

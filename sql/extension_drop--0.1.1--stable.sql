@@ -135,7 +135,7 @@ $body$;
  * ============================================================================
  * WARNING: DEFINER-SAFE CODE ONLY
  *
- * This function runs with its OWNER's rights whenever extension_drop__claim()
+ * This function runs with its OWNER's rights whenever _extension_drop__dropping()
  * (SECURITY DEFINER) calls it through extension_drop__sanity_assert().
  * Keep it definer-safe:
  *
@@ -164,7 +164,7 @@ $body$
  * ============================================================================
  * WARNING: DEFINER-SAFE CODE ONLY
  *
- * This function runs with its OWNER's rights whenever extension_drop__claim()
+ * This function runs with its OWNER's rights whenever _extension_drop__dropping()
  * (SECURITY DEFINER) calls it. Keep it definer-safe:
  *
  *   - pinned search_path (done by create_function); every reference to our objects goes through
@@ -301,14 +301,14 @@ $body$
 );
 
 /*
- * CLAIM: SECURITY DEFINER so a role that can drop an extension needs no privileges on
+ * DROPPING: SECURITY DEFINER so a role that can drop an extension needs no privileges on
  * extension_drop__commands. It only deletes and returns the registrations of extensions the current
  * sql_drop command is dropping (outside a sql_drop trigger pg_event_trigger_dropped_objects() errors, so
  * a direct call deletes nothing), then runs sanity_assert as the owner. It never runs the returned SQL:
  * the event trigger does that as the dropping role.
  */
 SELECT __extension_drop.create_function(
-  'extension_drop__claim'
+  '_extension_drop__dropping'
   , ''
   , 'TABLE(extension_name name, sql text) LANGUAGE plpgsql SECURITY DEFINER'
   , $body$
@@ -340,12 +340,12 @@ DECLARE
 BEGIN
   RAISE DEBUG 'extension_drop event trigger entry: tg_event %, tg_tag %', tg_event, tg_tag;
 
-  -- Most drops involve no extension; don't call the claim function (and its assert) for them.
+  -- Most drops involve no extension; don't call the dropping function (and its assert) for them.
   IF NOT EXISTS (SELECT 1 FROM pg_event_trigger_dropped_objects() WHERE object_type = 'extension') THEN
     RETURN;
   END IF;
 
-  FOR r IN SELECT * FROM @extension_schema@.extension_drop__claim() LOOP
+  FOR r IN SELECT * FROM @extension_schema@._extension_drop__dropping() LOOP
     RAISE DEBUG E'extension "%" is being dropped; executing SQL:\n%', r.extension_name, r.sql;
     EXECUTE r.sql;
     -- Registered SQL may change search_path; don't let it leak into the next registration

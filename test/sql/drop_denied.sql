@@ -5,7 +5,7 @@
  * Dropping an extension needs no privileges on extension_drop's registration table, for the three commands
  * the trigger fires for, whether or not the extension is registered. Also covered: registered SQL runs as
  * the dropping role, XD001 for a stale registration (and its text), drops involving no extension, and
- * the planted-operator attack on the claim function. Scenarios are grouped by the state they need;
+ * the planted-operator attack on the dropping function. Scenarios are grouped by the state they need;
  * pg_temp.xd_scenario rolls back whatever each one does.
  */
 SELECT plan(
@@ -13,7 +13,7 @@ SELECT plan(
   + 9 -- DROP SCHEMA CASCADE and DROP OWNED BY, registered SQL's error, stale registration
   + 3 -- XD001 text
   + 2 -- temp table of the same name
-  + 1 -- claim outside the trigger
+  + 1 -- dropping function outside the trigger
   + 6 -- planted operators
   + 2 -- member functions
   + 3 -- DROP EXTENSION by the owner
@@ -132,7 +132,7 @@ SELECT * FROM pg_temp.xd_scenario('Unregistered: DROP SCHEMA CASCADE with a stal
 
 /*
  * Every path that raises XD001 gives the same message, DETAIL and HINT: sanity_assert, which both
- * extension_drop__get() and the event trigger (via extension_drop__claim) raise from.
+ * extension_drop__get() and the event trigger (via _extension_drop__dropping) raise from.
  */
 SAVEPOINT stale;
 INSERT INTO :"extension_drop_schema".extension_drop__commands VALUES('extension_drop_test_stale', 'SELECT 1');
@@ -159,15 +159,15 @@ SELECT matches(
 );
 ROLLBACK TO SAVEPOINT stale;
 
--- A temp table named like ours must not hide the real registration from claim
+-- A temp table named like ours must not hide the real registration from the dropping function
 SELECT * FROM pg_temp.xd_scenario('A role with a temp table of the same name drops a registered extension'
   , 'extension_drop_test_plain'
   , 'CREATE TEMP TABLE extension_drop__commands(extension_name name, sql text); DROP SCHEMA extension_drop_test_plain_schema CASCADE'
   , ran_as => 'extension_drop_test_plain');
 
--- Called directly, claim fails before deleting anything: pg_event_trigger_dropped_objects() refuses outside the trigger
-SELECT * FROM pg_temp.xd_scenario('extension_drop__claim outside the event trigger fails for a plain role'
-  , 'extension_drop_test_plain', 'SELECT @S@.extension_drop__claim()'
+-- Called directly, the dropping function fails before deleting anything: pg_event_trigger_dropped_objects() refuses outside the trigger
+SELECT * FROM pg_temp.xd_scenario('_extension_drop__dropping outside the event trigger fails for a plain role'
+  , 'extension_drop_test_plain', 'SELECT @S@._extension_drop__dropping()'
   , state => '39P03', msg => 'pg_event_trigger_dropped_objects() can only be called in a sql_drop event trigger function');
 
 /*
@@ -191,7 +191,7 @@ SELECT pg_temp.xd_as('extension_drop_test_plain', :'plant') \g /dev/null
 
 SELECT * FROM pg_temp.xd_scenario('Registered: DROP SCHEMA CASCADE by the role with the operators planted'
   , 'extension_drop_test_plain', 'DROP SCHEMA extension_drop_test_plain_schema CASCADE', hijack => true);
--- With a stale row claim runs sanity_assert as the owner; the planted operators still must not run
+-- With a stale row the dropping function runs sanity_assert as the owner; the planted operators still must not run
 SELECT * FROM pg_temp.xd_scenario('DROP SCHEMA CASCADE with a stale registration and the operators planted'
   , 'extension_drop_test_plain', 'DROP SCHEMA extension_drop_test_plain_schema CASCADE'
   , stale => true, state => 'XD001', msg => 'unexpected drop commands', hijack => true);
@@ -203,7 +203,7 @@ SELECT * FROM pg_temp.xd_scenario('Superuser extension_drop__get and drop of a r
 ROLLBACK TO SAVEPOINT planted;
 
 /*
- * Every function runs with a pinned search_path, and only extension_drop__claim is SECURITY DEFINER (so
+ * Every function runs with a pinned search_path, and only _extension_drop__dropping is SECURITY DEFINER (so
  * the event trigger, and everything it runs, is the dropping role's own).
  * Not functions_are(): in existing mode the schema may hold other objects.
  * Matching (name, prosecdef) rows makes an added overload or definer function fail.
@@ -213,8 +213,8 @@ SELECT bag_eq(
   , $$VALUES ('extension_drop__sanity_check', false), ('extension_drop__sanity_assert', false), ('extension_drop__repair', false)
     , ('extension_drop__get', false), ('extension_drop__add', false), ('extension_drop__remove', false)
     , ('extension_drop__update', false), ('extension_drop__event_trigger', false), ('extension_drop__usage_guard', false)
-    , ('extension_drop__claim', true)$$
-  , 'extension_drop''s member functions are exactly these, and only extension_drop__claim is SECURITY DEFINER'
+    , ('_extension_drop__dropping', true)$$
+  , 'extension_drop''s member functions are exactly these, and only _extension_drop__dropping is SECURITY DEFINER'
 );
 -- pgTAP has no assertion for proconfig
 SELECT is_empty(

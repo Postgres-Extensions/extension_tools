@@ -8,7 +8,9 @@ Requires [cat_tools](https://pgxn.org/dist/cat_tools/) >= 0.3.0.
 
 `PUBLIC` must have USAGE on the schema extension_drop is installed in. The
 event trigger runs as whichever role drops an extension, and calls
-`extension_drop__claim()` in that schema.
+`_extension_drop__dropping()` in that schema. The leading underscore marks
+it as internal, not for external callers (the extension has no internal
+schema); it is documented under [How it works](#how-it-works).
 
 `CREATE EXTENSION` and `ALTER EXTENSION ... UPDATE` fail unless `PUBLIC` has
 USAGE. The error's HINT gives the exact `GRANT USAGE ON SCHEMA ... TO PUBLIC`
@@ -52,20 +54,6 @@ arbitrary SQL to run later. Grant them to specific roles as needed.
   Look up the row (`extension_name`, `sql`) registered for `extension_name`.
   Granted to `PUBLIC` by default.
 
-- `extension_drop__claim() RETURNS TABLE(extension_name name, sql text)`
-  Lets any role that can drop an extension do so without privileges on
-  `extension_drop__commands`, whether or not the extension is registered. The
-  registered SQL runs as the dropping role, so that role needs whatever the SQL
-  needs. Only the event trigger can use it: it deletes the registrations of the
-  extensions being dropped and returns them, in no particular order, and
-  errors when called outside a `sql_drop` trigger, so a direct call can't
-  remove the registration of a live extension. It is `SECURITY DEFINER` (with
-  `search_path = pg_catalog, pg_temp` and schema-qualified references), runs
-  `extension_drop__sanity_assert()` as its owner after the delete, and never
-  executes the SQL. Granted to `PUBLIC`. Its owner is the role that ran
-  `CREATE EXTENSION` (or the `ALTER EXTENSION ... UPDATE` that first created
-  it).
-
 - `extension_drop__sanity_check(ignore name DEFAULT NULL) RETURNS name[]`
   Returns the names of extensions that have registered drop commands but no
   longer exist. Should always return an empty array; pass an extension name
@@ -75,7 +63,7 @@ arbitrary SQL to run later. Grant them to specific roles as needed.
 - `extension_drop__sanity_assert(ignore name DEFAULT NULL) RETURNS void`
   Raises an error if `extension_drop__sanity_check()` (called with the same
   `ignore` argument) isn't empty. Granted to `PUBLIC` by default.
-  `extension_drop__claim` calls it, as its owner, so it runs with the
+  `_extension_drop__dropping` calls it, as its owner, so it runs with the
   owner's rights.
 
 - `extension_drop__repair() RETURNS void`
@@ -112,6 +100,17 @@ extensions.
 
 Dropping an extension, registered or not, needs no privileges on
 `extension_drop__commands`; the trigger gets the registered SQL from
-`extension_drop__claim()`, which deletes the registration with its owner's
+`_extension_drop__dropping()`, which deletes the registration with its owner's
 rights. The SQL itself runs as the dropping role, which may need further
 privileges. A stale registration still fails the drop with `XD001`.
+
+`_extension_drop__dropping() RETURNS TABLE(extension_name name, sql text)` is
+internal; only the event trigger can use it. It deletes the registrations of
+the extensions being dropped and returns them, in no particular order, and
+errors when called outside a `sql_drop` trigger, so a direct call can't remove
+the registration of a live extension. It is `SECURITY DEFINER` (with
+`search_path = pg_catalog, pg_temp` and schema-qualified references), runs
+`extension_drop__sanity_assert()` as its owner after the delete, and never
+executes the SQL. Granted to `PUBLIC`. Its owner is the role that ran
+`CREATE EXTENSION` (or the `ALTER EXTENSION ... UPDATE` that first created
+it).

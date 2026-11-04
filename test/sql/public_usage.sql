@@ -2,7 +2,7 @@
 \i test/pgxntool/setup.sql
 
 /*
- * extension_drop calls extension_drop__claim() as whichever role drops an extension, so PUBLIC
+ * extension_drop calls _extension_drop__dropping() as whichever role drops an extension, so PUBLIC
  * must keep USAGE on its schema: install and update refuse without it, REVOKE / DROP OWNED that would
  * remove it are rolled back (ddl_command_end), and every REVOKE / DROP OWNED is refused up front while
  * PUBLIC already lacks it (ddl_command_start).

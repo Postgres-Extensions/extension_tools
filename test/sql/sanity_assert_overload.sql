@@ -6,7 +6,7 @@
  * next to the real one; every call must pass the argument explicitly or it becomes ambiguous. plpgsql keeps
  * the plan it resolved, so the overload is planted first and each caller below is first run afterwards, in
  * this file's own session: a caller that already ran in the session would hide a missing argument. Both
- * a registered and an unregistered extension are dropped, since the claim function runs for either.
+ * a registered and an unregistered extension are dropped, since the dropping function runs for either.
  */
 SELECT plan(
   2 -- setup

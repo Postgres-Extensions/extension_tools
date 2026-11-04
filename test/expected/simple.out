@@ -44,9 +44,9 @@ ok 41 - Register recording SQL for extension_drop_test
 ok 42 - Drop both extensions with one command
 ok 43 - Every registered SQL ran, each starting under the pinned search_path
 ok 44 - Registrations removed
-ok 45 - Register SQL that calls extension_drop__claim()
+ok 45 - Register SQL that calls _extension_drop__dropping()
 ok 46 - Drop extension_drop_test only
-ok 47 - The nested claim returned no rows, under the pinned search_path
+ok 47 - The nested dropping call returned no rows, under the pinned search_path
 ok 48 - The surviving extension keeps its registration
 ok 49 - Update extension_drop_test registration
 ok 50 - Update left the other registration unchanged
