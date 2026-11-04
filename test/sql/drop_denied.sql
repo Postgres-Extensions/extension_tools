@@ -39,7 +39,8 @@ CREATE FUNCTION pg_temp.xd_scenario(
 ) RETURNS SETOF text LANGUAGE plpgsql AS $f$
 DECLARE
   sch text := quote_ident((SELECT n.nspname FROM pg_extension x JOIN pg_namespace n ON n.oid = x.extnamespace
-                            WHERE x.extname = 'extension_drop'));
+                            WHERE x.extname = 'extension_drop'))
+  ;
   run text := replace(drop_sql, '@S@', sch);
   remaining int;
   actual text := '';
@@ -89,7 +90,8 @@ CREATE TEMP VIEW xd_members AS
   SELECT p.proname, p.prosecdef, p.proconfig
   FROM pg_depend d JOIN pg_proc p ON p.oid = d.objid
   WHERE d.classid = 'pg_proc'::regclass AND d.refclassid = 'pg_extension'::regclass AND d.deptype = 'e'
-    AND d.refobjid = (SELECT e.oid FROM pg_extension e WHERE e.extname = 'extension_drop');
+    AND d.refobjid = (SELECT e.oid FROM pg_extension e WHERE e.extname = 'extension_drop')
+;
 
 \set REGISTER_RECORDER 'SELECT ' :"extension_drop_schema" '.extension_drop__update(''extension_drop_test'', $$SELECT set_config(''extension_drop_test.ran_as'', current_user, false)$$)' '\\g /dev/null'
 
@@ -107,28 +109,35 @@ SELECT table_privs_are(
 -- Registered SQL runs as the dropping role and the registration is removed; unregistered drops just work
 SELECT * FROM pg_temp.xd_scenario('Registered: DROP SCHEMA CASCADE with no table privileges'
   , 'extension_drop_test_plain', 'DROP SCHEMA extension_drop_test_plain_schema CASCADE'
-  , ran_as => 'extension_drop_test_plain');
+  , ran_as => 'extension_drop_test_plain'
+);
 SELECT * FROM pg_temp.xd_scenario('Registered: DROP OWNED BY with no table privileges'
   , 'extension_drop_test_plain', 'DROP OWNED BY extension_drop_test_plain CASCADE'
-  , ran_as => 'extension_drop_test_plain');
+  , ran_as => 'extension_drop_test_plain'
+);
 SELECT * FROM pg_temp.xd_scenario('Unregistered: DROP SCHEMA CASCADE with no table privileges'
-  , 'extension_drop_test_plain', 'DROP SCHEMA extension_drop_test_plain_schema CASCADE', unreg => true);
+  , 'extension_drop_test_plain', 'DROP SCHEMA extension_drop_test_plain_schema CASCADE', unreg => true
+);
 SELECT * FROM pg_temp.xd_scenario('Unregistered: DROP OWNED BY with no table privileges'
-  , 'extension_drop_test_plain', 'DROP OWNED BY extension_drop_test_plain CASCADE', unreg => true);
+  , 'extension_drop_test_plain', 'DROP OWNED BY extension_drop_test_plain CASCADE', unreg => true
+);
 
 -- A privilege error from the registered SQL itself surfaces unchanged
 SELECT * FROM pg_temp.xd_scenario('Registered SQL''s own privilege error surfaces unchanged'
   , 'extension_drop_test_plain', 'DROP SCHEMA extension_drop_test_plain_schema CASCADE'
   , setup => $$SELECT @S@.extension_drop__update('extension_drop_test', 'CREATE ROLE extension_drop_test_never')$$
-  , state => '42501', msg => 'permission denied to create role');
+  , state => '42501', msg => 'permission denied to create role'
+);
 
 -- A stale registration fails the drop whether or not the extension is registered
 SELECT * FROM pg_temp.xd_scenario('Registered: DROP SCHEMA CASCADE with a stale registration present'
   , 'extension_drop_test_plain', 'DROP SCHEMA extension_drop_test_plain_schema CASCADE'
-  , stale => true, state => 'XD001', msg => 'unexpected drop commands');
+  , stale => true, state => 'XD001', msg => 'unexpected drop commands'
+);
 SELECT * FROM pg_temp.xd_scenario('Unregistered: DROP SCHEMA CASCADE with a stale registration present'
   , 'extension_drop_test_plain', 'DROP SCHEMA extension_drop_test_plain_schema CASCADE'
-  , unreg => true, stale => true, state => 'XD001', msg => 'unexpected drop commands');
+  , unreg => true, stale => true, state => 'XD001', msg => 'unexpected drop commands'
+);
 
 /*
  * Every path that raises XD001 gives the same message, DETAIL and HINT: sanity_assert, which both
@@ -163,12 +172,14 @@ ROLLBACK TO SAVEPOINT stale;
 SELECT * FROM pg_temp.xd_scenario('A role with a temp table of the same name drops a registered extension'
   , 'extension_drop_test_plain'
   , 'CREATE TEMP TABLE extension_drop__commands(extension_name name, sql text); DROP SCHEMA extension_drop_test_plain_schema CASCADE'
-  , ran_as => 'extension_drop_test_plain');
+  , ran_as => 'extension_drop_test_plain'
+);
 
 -- Called directly, the dropping function fails before deleting anything: pg_event_trigger_dropped_objects() refuses outside the trigger
 SELECT * FROM pg_temp.xd_scenario('_extension_drop__dropping outside the event trigger fails for a plain role'
   , 'extension_drop_test_plain', 'SELECT @S@._extension_drop__dropping()'
-  , state => '39P03', msg => 'pg_event_trigger_dropped_objects() can only be called in a sql_drop event trigger function');
+  , state => '39P03', msg => 'pg_event_trigger_dropped_objects() can only be called in a sql_drop event trigger function'
+);
 
 /*
  * A role with CREATE on extension_drop's schema must not be able to run code as anyone who calls into it.
@@ -190,16 +201,19 @@ SELECT format($q$
 SELECT pg_temp.xd_as('extension_drop_test_plain', :'plant') \g /dev/null
 
 SELECT * FROM pg_temp.xd_scenario('Registered: DROP SCHEMA CASCADE by the role with the operators planted'
-  , 'extension_drop_test_plain', 'DROP SCHEMA extension_drop_test_plain_schema CASCADE', hijack => true);
+  , 'extension_drop_test_plain', 'DROP SCHEMA extension_drop_test_plain_schema CASCADE', hijack => true
+);
 -- With a stale row the dropping function runs sanity_assert as the owner; the planted operators still must not run
 SELECT * FROM pg_temp.xd_scenario('DROP SCHEMA CASCADE with a stale registration and the operators planted'
   , 'extension_drop_test_plain', 'DROP SCHEMA extension_drop_test_plain_schema CASCADE'
-  , stale => true, state => 'XD001', msg => 'unexpected drop commands', hijack => true);
+  , stale => true, state => 'XD001', msg => 'unexpected drop commands', hijack => true
+);
 -- The invoker paths run with the caller's own rights, so a superuser is the interesting caller
 SELECT * FROM pg_temp.xd_scenario('Superuser extension_drop__get and drop of a registered extension with the operators planted'
   , NULL
   , $$SELECT * FROM @S@.extension_drop__get('extension_drop_test'); DROP SCHEMA extension_drop_test_plain_schema CASCADE$$
-  , hijack => true);
+  , hijack => true
+);
 ROLLBACK TO SAVEPOINT planted;
 
 /*
@@ -231,9 +245,11 @@ ALTER ROLE extension_drop_test_owner NOSUPERUSER;
 
 SELECT * FROM pg_temp.xd_scenario('Registered: DROP EXTENSION by the extension''s non-superuser owner with no table privileges'
   , 'extension_drop_test_owner', 'DROP EXTENSION extension_drop_test'
-  , ran_as => 'extension_drop_test_owner');
+  , ran_as => 'extension_drop_test_owner'
+);
 SELECT * FROM pg_temp.xd_scenario('Unregistered: DROP EXTENSION by the extension''s non-superuser owner with no table privileges'
-  , 'extension_drop_test_owner', 'DROP EXTENSION extension_drop_test', unreg => true);
+  , 'extension_drop_test_owner', 'DROP EXTENSION extension_drop_test', unreg => true
+);
 
 /*
  * Drops involving no extension must not depend on the caller's privileges or on the state of
@@ -249,11 +265,14 @@ SELECT results_eq(
   , 'Stale registration is present'
 );
 SELECT * FROM pg_temp.xd_scenario('Non-superuser DROP SCHEMA CASCADE of a schema with no extension'
-  , 'extension_drop_test_plain', 'DROP SCHEMA extension_drop_test_unrelated CASCADE');
+  , 'extension_drop_test_plain', 'DROP SCHEMA extension_drop_test_unrelated CASCADE'
+);
 SELECT * FROM pg_temp.xd_scenario('Non-superuser DROP OWNED BY with no extension'
-  , 'extension_drop_test_plain', 'DROP OWNED BY extension_drop_test_plain');
+  , 'extension_drop_test_plain', 'DROP OWNED BY extension_drop_test_plain'
+);
 SELECT * FROM pg_temp.xd_scenario('Superuser DROP SCHEMA with stale registration'
-  , NULL, 'CREATE SCHEMA extension_drop_test_su_schema; DROP SCHEMA extension_drop_test_su_schema');
+  , NULL, 'CREATE SCHEMA extension_drop_test_su_schema; DROP SCHEMA extension_drop_test_su_schema'
+);
 
 \i test/finish.sql
 

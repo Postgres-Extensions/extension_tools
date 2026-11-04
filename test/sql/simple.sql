@@ -162,7 +162,8 @@ SELECT lives_ok(
       SELECT set_config('search_path', 'pg_catalog, public, pg_temp', true)$s$, n))
   , 'Register recording SQL for ' || n
 )
-  FROM unnest(ARRAY['extension_drop_test_b', 'extension_drop_test']) n;
+  FROM unnest(ARRAY['extension_drop_test_b', 'extension_drop_test']) n
+;
 
 -- A query returning extension_drop_test_b's registered row, to prove it survives
 SELECT format($$SELECT 'extension_drop_test_b'::name, %L::text$$, sql) AS "B_ROW"

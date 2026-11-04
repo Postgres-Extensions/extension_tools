@@ -337,7 +337,8 @@ BEGIN
     DELETE FROM @extension_schema@.extension_drop__commands c
       USING pg_event_trigger_dropped_objects() d
       WHERE c.extension_name = d.object_name AND d.object_type = 'extension'
-      RETURNING c.extension_name, c.sql;
+      RETURNING c.extension_name, c.sql
+  ;
 
   PERFORM @extension_schema@.extension_drop__sanity_assert(NULL::name);
 END
@@ -404,11 +405,13 @@ BEGIN
       RAISE EXCEPTION 'PUBLIC lacks USAGE on schema "%"', replace(nsname, '"', '""')
         USING ERRCODE = 'object_not_in_prerequisite_state'
           , DETAIL = detail
-          , HINT = format('Run GRANT USAGE ON SCHEMA %s TO PUBLIC.', quote_ident(nsname));
+          , HINT = format('Run GRANT USAGE ON SCHEMA %s TO PUBLIC.', quote_ident(nsname))
+  ;
     END IF;
     RAISE EXCEPTION 'cannot remove USAGE on schema "%" from PUBLIC', replace(nsname, '"', '""')
       USING ERRCODE = 'object_not_in_prerequisite_state'
-        , DETAIL = detail;
+        , DETAIL = detail
+  ;
   END IF;
 END
 $body$
