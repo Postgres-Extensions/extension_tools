@@ -356,6 +356,7 @@ SELECT __extension_drop.create_function(
   , $body$
 DECLARE
   r record;
+  saved_path text := current_setting('search_path');
 BEGIN
   RAISE DEBUG 'extension_drop event trigger entry: tg_event %, tg_tag %', tg_event, tg_tag;
 
@@ -366,9 +367,9 @@ BEGIN
 
   FOR r IN SELECT * FROM @extension_schema@.extension_drop__claim() LOOP
     RAISE DEBUG E'extension "%" is being dropped; executing SQL:\n%', r.extension_name, r.sql;
-    -- Reset to the pinned path: an earlier registration may have changed it (qualified so it can't be hijacked)
-    PERFORM pg_catalog.set_config('search_path', 'pg_catalog, pg_temp', true);
     EXECUTE r.sql;
+    -- Registered SQL may change search_path; don't let it leak into the next registration
+    PERFORM pg_catalog.set_config('search_path', saved_path, true);
   END LOOP;
 END
 $body$
