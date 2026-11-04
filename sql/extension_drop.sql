@@ -209,7 +209,8 @@ BEGIN
         , array_to_string(bad, ', ')
       )
       , HINT = $$This should not happen unless someone manually inserted into "extension_drop__commands" or messed with the "extension_drop" event trigger.
-  Use SELECT extension_drop__repair() to fix this.$$;
+  Use SELECT extension_drop__repair() to fix this.$$
+      ;
   END IF;
 END
 $body$

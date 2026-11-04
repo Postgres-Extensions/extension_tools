@@ -161,7 +161,7 @@ the commands data, so re-register afterwards:
 
 ### Restore fails with a duplicate key on `extension_drop__commands`
 
-For a schema other than `public`, use the section 1 recipes, which already
+For a schema other than `public`, use the recipes under [Restore into a schema other than `public` fails](#restore-into-a-schema-other-than-public-fails), which already
 leave this data out. The recipes below apply when extension_drop is in
 `public`.
 

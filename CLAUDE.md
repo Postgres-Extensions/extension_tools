@@ -18,7 +18,7 @@ lives. Every permanent function sets `search_path = pg_catalog, pg_temp`
 functions) and refers to its own objects through `@extension_schema@`, which
 the install and update scripts substitute with the quoted schema name.
 Registered SQL runs under the event trigger's own pinned
-`pg_catalog, pg_temp`, reset before each registration; the extension's
+`pg_catalog, pg_temp`, restored after each registration; the extension's
 schema and dependency schemas (e.g. cat_tools) are not on that path, so
 registered SQL must qualify everything. The extension itself is genuinely
 schema-flexible. See `../ai/CLAUDE.md`'s "Schema-flexibility testing"
