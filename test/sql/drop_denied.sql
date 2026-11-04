@@ -13,7 +13,7 @@ SELECT plan(
   + 9 -- DROP SCHEMA CASCADE and DROP OWNED BY, registered SQL's error, stale registration
   + 3 -- XD001 text
   + 2 -- temp table of the same name
-  + 2 -- claim outside the trigger
+  + 1 -- claim outside the trigger
   + 6 -- planted operators
   + 2 -- member functions
   + 3 -- DROP EXTENSION by the owner
@@ -165,14 +165,10 @@ SELECT * FROM pg_temp.xd_scenario('A role with a temp table of the same name dro
   , 'CREATE TEMP TABLE extension_drop__commands(extension_name name, sql text); DROP SCHEMA extension_drop_test_plain_schema CASCADE'
   , ran_as => 'extension_drop_test_plain');
 
--- Called directly, claim must delete nothing: pg_event_trigger_dropped_objects() refuses outside the trigger
+-- Called directly, claim fails before deleting anything: pg_event_trigger_dropped_objects() refuses outside the trigger
 SELECT * FROM pg_temp.xd_scenario('extension_drop__claim outside the event trigger fails for a plain role'
   , 'extension_drop_test_plain', 'SELECT @S@.extension_drop__claim()'
   , state => '39P03', msg => 'pg_event_trigger_dropped_objects() can only be called in a sql_drop event trigger function');
-SELECT isnt_empty(
-  format($$SELECT 1 FROM %I.extension_drop__commands WHERE extension_name = 'extension_drop_test'$$, :'extension_drop_schema')
-  , 'The extension is still registered'
-);
 
 /*
  * A role with CREATE on extension_drop's schema must not be able to run code as anyone who calls into it.

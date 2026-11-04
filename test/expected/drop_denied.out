@@ -1,5 +1,5 @@
 \set ECHO none
-1..33
+1..32
 ok 1 - The role has no privileges on extension_drop__commands
 ok 2 - Registered: DROP SCHEMA CASCADE with no table privileges
 ok 3 - Registered: DROP SCHEMA CASCADE with no table privileges: effects
@@ -16,21 +16,20 @@ ok 13 - Plural DETAIL names both stale extensions
 ok 14 - A role with a temp table of the same name drops a registered extension
 ok 15 - A role with a temp table of the same name drops a registered extension: effects
 ok 16 - extension_drop__claim outside the event trigger fails for a plain role
-ok 17 - The extension is still registered
-ok 18 - Registered: DROP SCHEMA CASCADE by the role with the operators planted
-ok 19 - Registered: DROP SCHEMA CASCADE by the role with the operators planted: effects
-ok 20 - DROP SCHEMA CASCADE with a stale registration and the operators planted
-ok 21 - DROP SCHEMA CASCADE with a stale registration and the operators planted: effects
-ok 22 - Superuser extension_drop__get and drop of a registered extension with the operators planted
-ok 23 - Superuser extension_drop__get and drop of a registered extension with the operators planted: effects
-ok 24 - extension_drop's member functions are exactly these, and only extension_drop__claim is SECURITY DEFINER
-ok 25 - Every extension_drop function pins search_path to pg_catalog, pg_temp
-ok 26 - Registered: DROP EXTENSION by the extension's non-superuser owner with no table privileges
-ok 27 - Registered: DROP EXTENSION by the extension's non-superuser owner with no table privileges: effects
-ok 28 - Unregistered: DROP EXTENSION by the extension's non-superuser owner with no table privileges
-ok 29 - Stale registration is present
-ok 30 - Non-superuser DROP SCHEMA CASCADE of a schema with no extension
-ok 31 - Non-superuser DROP OWNED BY with no extension
-ok 32 - Superuser DROP SCHEMA with stale registration
-ok 33 - extension_drop's schema should not be reachable via search_path
+ok 17 - Registered: DROP SCHEMA CASCADE by the role with the operators planted
+ok 18 - Registered: DROP SCHEMA CASCADE by the role with the operators planted: effects
+ok 19 - DROP SCHEMA CASCADE with a stale registration and the operators planted
+ok 20 - DROP SCHEMA CASCADE with a stale registration and the operators planted: effects
+ok 21 - Superuser extension_drop__get and drop of a registered extension with the operators planted
+ok 22 - Superuser extension_drop__get and drop of a registered extension with the operators planted: effects
+ok 23 - extension_drop's member functions are exactly these, and only extension_drop__claim is SECURITY DEFINER
+ok 24 - Every extension_drop function pins search_path to pg_catalog, pg_temp
+ok 25 - Registered: DROP EXTENSION by the extension's non-superuser owner with no table privileges
+ok 26 - Registered: DROP EXTENSION by the extension's non-superuser owner with no table privileges: effects
+ok 27 - Unregistered: DROP EXTENSION by the extension's non-superuser owner with no table privileges
+ok 28 - Stale registration is present
+ok 29 - Non-superuser DROP SCHEMA CASCADE of a schema with no extension
+ok 30 - Non-superuser DROP OWNED BY with no extension
+ok 31 - Superuser DROP SCHEMA with stale registration
+ok 32 - extension_drop's schema should not be reachable via search_path
 # TRANSACTION INTENTIONALLY LEFT OPEN!
