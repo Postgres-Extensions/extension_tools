@@ -1,4 +1,4 @@
 comment = 'Allows specifying commands to run when dropping an extension.'
-default_version = 'stable'
+default_version = '0.2.0'
 relocatable = false
 requires = 'cat_tools'
