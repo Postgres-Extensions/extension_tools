@@ -1,0 +1,1 @@
+-- No changes yet since 0.2.0; replaced with real statements by the first SQL-touching change.
