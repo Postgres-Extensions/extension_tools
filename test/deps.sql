@@ -39,4 +39,31 @@ WHERE x.extname = 'extension_drop'
 \set TT extension_drop_test_table
 CREATE TEMP TABLE :TT (i int);
 
+/*
+ * Runs sql and returns the message, DETAIL and HINT of the error it raises when that error's SQLSTATE is
+ * `state`; returns no rows if it raises nothing. Any other error propagates.
+ */
+CREATE FUNCTION pg_temp.xd_capture(sql text, state text)
+RETURNS TABLE(message text, detail text, hint text) LANGUAGE plpgsql AS $f$
+BEGIN
+  EXECUTE sql;
+EXCEPTION WHEN OTHERS THEN
+  IF SQLSTATE <> state THEN
+    RAISE;
+  END IF;
+  GET STACKED DIAGNOSTICS message = MESSAGE_TEXT, detail = PG_EXCEPTION_DETAIL, hint = PG_EXCEPTION_HINT;
+  RETURN NEXT;
+END $f$;
+
+/*
+ * Runs sql as role, then resets the role. On error the role reverts when the enclosing subtransaction
+ * is rolled back.
+ */
+CREATE FUNCTION pg_temp.xd_as(role name, sql text) RETURNS void LANGUAGE plpgsql AS $f$
+BEGIN
+  EXECUTE format('SET LOCAL ROLE %I', role);
+  EXECUTE sql;
+  RESET ROLE;
+END $f$;
+
 -- vi: expandtab ts=2 sw=2

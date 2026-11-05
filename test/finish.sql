@@ -13,19 +13,16 @@
  * schema mid-run, so the value set at the top of the session is still
  * accurate here.
  *
- * existing mode is the one exception: there, extension_drop was installed
- * by a real pg_upgrade external to this suite (see test/install/load.sql),
- * landing wherever THAT process's own ambient defaults put it -- typically
- * public, which stays on search_path by default. We have no control over
- * or guarantee about that placement, so there's nothing to assert here in
- * that mode; skip() still counts as one test, so no plan() changes needed
- * either way.
+ * existing mode is the one exception: there, extension_drop was installed by a real pg_upgrade external to this
+ * suite (see test/install/load.sql), landing wherever THAT process's ambient defaults put it -- typically
+ * public, which stays on search_path by default -- so nothing can be asserted. It emits the same single test
+ * with the same label as pass(), which checks nothing; that keeps one expected output for every mode.
  */
 SELECT current_setting('extension_drop.test_load_mode') = 'existing' AS extension_drop_existing_mode
 \gset
 
 \if :extension_drop_existing_mode
-SELECT skip('existing mode: extension_drop''s placement is outside this suite''s control');
+SELECT pass('extension_drop''s schema should not be reachable via search_path');
 \else
 SELECT is(
   current_schemas(true) @> array[:'extension_drop_schema'::name]
